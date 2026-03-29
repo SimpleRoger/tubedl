@@ -8,7 +8,9 @@
 
 export * from "./addChannelRequest";
 export * from "./channel";
+export * from "./channelSearchResult";
 export * from "./errorResponse";
 export * from "./healthStatus";
 export * from "./listVideosParams";
+export * from "./searchChannelsParams";
 export * from "./video";

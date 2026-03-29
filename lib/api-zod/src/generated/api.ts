@@ -37,6 +37,22 @@ export const AddChannelBody = zod.object({
 });
 
 /**
+ * @summary Search YouTube channels by name
+ */
+export const SearchChannelsQueryParams = zod.object({
+  q: zod.coerce.string().describe("Search query"),
+});
+
+export const SearchChannelsResponseItem = zod.object({
+  youtubeChannelId: zod.string(),
+  name: zod.string(),
+  description: zod.string(),
+  thumbnailUrl: zod.string().nullish(),
+  subscriberCount: zod.string().nullish(),
+});
+export const SearchChannelsResponse = zod.array(SearchChannelsResponseItem);
+
+/**
  * @summary Remove a favourite channel
  */
 export const RemoveChannelParams = zod.object({

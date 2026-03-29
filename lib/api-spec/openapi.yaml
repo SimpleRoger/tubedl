@@ -64,6 +64,39 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /channels/search:
+    get:
+      operationId: searchChannels
+      tags: [channels]
+      summary: Search YouTube channels by name
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Search query
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChannelSearchResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /channels/{id}:
     delete:
       operationId: removeChannel
@@ -183,6 +216,25 @@ components:
         - publishedAt
         - channelId
         - channelName
+    ChannelSearchResult:
+      type: object
+      properties:
+        youtubeChannelId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        thumbnailUrl:
+          type: string
+          nullable: true
+        subscriberCount:
+          type: string
+          nullable: true
+      required:
+        - youtubeChannelId
+        - name
+        - description
     ErrorResponse:
       type: object
       properties:

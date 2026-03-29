@@ -74,6 +74,67 @@ export async function resolveChannelInfo(
   };
 }
 
+export interface YouTubeChannelSearchResult {
+  youtubeChannelId: string;
+  name: string;
+  description: string;
+  thumbnailUrl: string | null;
+  subscriberCount: string | null;
+}
+
+export async function searchChannels(query: string): Promise<YouTubeChannelSearchResult[]> {
+  const apiKey = getApiKey();
+
+  const searchUrl = `${YOUTUBE_API_BASE}/search?part=snippet&type=channel&q=${encodeURIComponent(query)}&maxResults=8&key=${apiKey}`;
+  const searchResp = await fetch(searchUrl);
+
+  if (!searchResp.ok) {
+    const body = await searchResp.text();
+    logger.error({ status: searchResp.status, body }, "YouTube channel search API error");
+    throw new Error(`YouTube API error: ${searchResp.status}`);
+  }
+
+  const searchData = (await searchResp.json()) as {
+    items?: Array<{
+      id: { channelId: string };
+      snippet: {
+        title: string;
+        description: string;
+        thumbnails?: { default?: { url: string } };
+      };
+    }>;
+  };
+
+  if (!searchData.items || searchData.items.length === 0) {
+    return [];
+  }
+
+  // Fetch subscriber counts for the found channels
+  const channelIds = searchData.items.map((i) => i.id.channelId).join(",");
+  const statsUrl = `${YOUTUBE_API_BASE}/channels?part=statistics&id=${encodeURIComponent(channelIds)}&key=${apiKey}`;
+  const statsResp = await fetch(statsUrl);
+
+  const subsMap = new Map<string, string>();
+  if (statsResp.ok) {
+    const statsData = (await statsResp.json()) as {
+      items?: Array<{ id: string; statistics?: { subscriberCount?: string } }>;
+    };
+    for (const item of statsData.items ?? []) {
+      if (item.statistics?.subscriberCount) {
+        subsMap.set(item.id, item.statistics.subscriberCount);
+      }
+    }
+  }
+
+  return searchData.items.map((item) => ({
+    youtubeChannelId: item.id.channelId,
+    name: item.snippet.title,
+    description: item.snippet.description,
+    thumbnailUrl: item.snippet.thumbnails?.default?.url ?? null,
+    subscriberCount: subsMap.get(item.id.channelId) ?? null,
+  }));
+}
+
 export async function fetchRecentVideos(
   channelId: string,
   channelName: string,

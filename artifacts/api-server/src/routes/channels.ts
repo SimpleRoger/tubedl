@@ -5,10 +5,29 @@ import {
   AddChannelBody,
   RemoveChannelParams,
   ListChannelsResponse,
+  SearchChannelsQueryParams,
+  SearchChannelsResponse,
 } from "@workspace/api-zod";
-import { resolveChannelInfo } from "../lib/youtube";
+import { resolveChannelInfo, searchChannels } from "../lib/youtube";
 
 const router: IRouter = Router();
+
+router.get("/channels/search", async (req, res): Promise<void> => {
+  const queryParsed = SearchChannelsQueryParams.safeParse(req.query);
+  if (!queryParsed.success) {
+    res.status(400).json({ error: queryParsed.error.message });
+    return;
+  }
+
+  const { q } = queryParsed.data;
+  if (!q || q.trim().length === 0) {
+    res.json([]);
+    return;
+  }
+
+  const results = await searchChannels(q.trim());
+  res.json(SearchChannelsResponse.parse(results));
+});
 
 router.get("/channels", async (_req, res): Promise<void> => {
   const channels = await db

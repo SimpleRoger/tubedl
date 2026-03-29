@@ -35,9 +35,24 @@ export interface Video {
   duration?: string | null;
 }
 
+export interface ChannelSearchResult {
+  youtubeChannelId: string;
+  name: string;
+  description: string;
+  thumbnailUrl?: string | null;
+  subscriberCount?: string | null;
+}
+
 export interface ErrorResponse {
   error: string;
 }
+
+export type SearchChannelsParams = {
+  /**
+   * Search query
+   */
+  q: string;
+};
 
 export type ListVideosParams = {
   /**

@@ -19,9 +19,11 @@ import type {
 import type {
   AddChannelRequest,
   Channel,
+  ChannelSearchResult,
   ErrorResponse,
   HealthStatus,
   ListVideosParams,
+  SearchChannelsParams,
   Video,
 } from "./api.schemas";
 
@@ -270,6 +272,100 @@ export const useAddChannel = <
 > => {
   return useMutation(getAddChannelMutationOptions(options));
 };
+
+/**
+ * @summary Search YouTube channels by name
+ */
+export const getSearchChannelsUrl = (params: SearchChannelsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/channels/search?${stringifiedParams}`
+    : `/api/channels/search`;
+};
+
+export const searchChannels = async (
+  params: SearchChannelsParams,
+  options?: RequestInit,
+): Promise<ChannelSearchResult[]> => {
+  return customFetch<ChannelSearchResult[]>(getSearchChannelsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getSearchChannelsQueryKey = (params?: SearchChannelsParams) => {
+  return [`/api/channels/search`, ...(params ? [params] : [])] as const;
+};
+
+export const getSearchChannelsQueryOptions = <
+  TData = Awaited<ReturnType<typeof searchChannels>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: SearchChannelsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof searchChannels>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getSearchChannelsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof searchChannels>>> = ({
+    signal,
+  }) => searchChannels(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof searchChannels>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type SearchChannelsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof searchChannels>>
+>;
+export type SearchChannelsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Search YouTube channels by name
+ */
+
+export function useSearchChannels<
+  TData = Awaited<ReturnType<typeof searchChannels>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: SearchChannelsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof searchChannels>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getSearchChannelsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Remove a favourite channel
