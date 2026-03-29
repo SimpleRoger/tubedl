@@ -48,7 +48,28 @@ Every package extends `tsconfig.base.json` which sets `composite: true`. The roo
 - `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
 - `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
 
+## Features
+
+### YouTube Channel Feed (`artifacts/youtube-feed`)
+
+React + Vite web app (at `/`) for aggregating recent YouTube videos from favourite channels.
+
+- **Frontend**: Dark YouTube-inspired theme with channel sidebar and video grid
+- **Backend**: Express API routes at `/api/channels` and `/api/videos`
+- **Database**: PostgreSQL table `channels` (via Drizzle ORM)
+- **YouTube API**: Uses YouTube Data API v3 — requires `YOUTUBE_API_KEY` secret
+- Fetches videos from the past 3 months, sorted by date, with view counts and duration
+
 ## Packages
+
+### `artifacts/youtube-feed` (`@workspace/youtube-feed`)
+
+React + Vite frontend. Routes at `/`.
+
+- Displays video feed from favourite channels
+- Add/remove channels by YouTube channel ID or @handle
+- Filter by channel, refresh feed
+- Depends on `@workspace/api-client-react` for generated hooks
 
 ### `artifacts/api-server` (`@workspace/api-server`)
 

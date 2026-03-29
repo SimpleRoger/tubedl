@@ -1,0 +1,14 @@
+packages:
+  "framer-motion": "For premium micro-interactions, layout animations, and staggered entry effects"
+  "date-fns": "For elegant relative date formatting (e.g., '2 days ago')"
+  "clsx": "Utility for constructing conditional className strings"
+  "tailwind-merge": "Utility for merging tailwind classes without style conflicts"
+
+images:
+  - path: "artifacts/youtube-feed/public/images/logo.png"
+    description: "A minimalist, premium 3D icon resembling a play button in neon red and deep dark grey, glowing slightly, isolated on a clean dark background. High-end, professional style."
+    aspect_ratio: "1:1"
+
+notes:
+  - The app depends on @workspace/api-client-react for TanStack Query hooks.
+  - Generates robust error states if the YouTube API key is missing (API returns 500).
