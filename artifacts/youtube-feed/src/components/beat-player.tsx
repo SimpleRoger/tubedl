@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   X, ChevronDown, ChevronUp, ExternalLink, Music2,
   Sparkles, Loader2, FileText, Download, CheckCircle2,
-  Mic, Square, Trash2, Cloud, CloudOff,
+  Mic, Square, Trash2, Cloud, CloudOff, ChevronsUpDown,
 } from "lucide-react";
 import type { Video } from "@workspace/api-client-react";
 import { formatDuration } from "../lib/utils";
@@ -33,6 +33,10 @@ export function BeatPlayer({ beat, onClose, onBeatSelect }: BeatPlayerProps) {
   const [videoExpanded, setVideoExpanded] = useState(false);
   const [lyrics, setLyrics] = useState("");
   const [downloadState, setDownloadState] = useState<DownloadState>("idle");
+
+  // Mic device selection
+  const [micDevices, setMicDevices] = useState<{ deviceId: string; label: string }[]>([]);
+  const [selectedMicId, setSelectedMicId] = useState<string>("");
 
   // Recording
   const [recordState, setRecordState] = useState<RecordState>("idle");
@@ -77,6 +81,32 @@ export function BeatPlayer({ beat, onClose, onBeatSelect }: BeatPlayerProps) {
   }, []);
 
   const vizFrameCount = useRef(0);
+
+  // Enumerate audio input devices — labels only available after mic permission
+  const enumMics = useCallback(async () => {
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      const inputs = all
+        .filter((d) => d.kind === "audioinput")
+        .map((d, i) => ({
+          deviceId: d.deviceId,
+          label: d.label || `Microphone ${i + 1}`,
+        }));
+      setMicDevices(inputs);
+      setSelectedMicId((prev) => {
+        if (!prev && inputs.length > 0) return inputs[0].deviceId;
+        if (prev && !inputs.find((m) => m.deviceId === prev) && inputs.length > 0) return inputs[0].deviceId;
+        return prev;
+      });
+    } catch {
+      // enumerateDevices not available — no picker shown
+    }
+  }, []);
+
+  // Enumerate on mount (labels may be empty before first permission grant)
+  useEffect(() => {
+    enumMics();
+  }, [enumMics]);
 
   const drawVisualizer = useCallback(() => {
     const canvas = vizCanvasRef.current;
@@ -279,7 +309,13 @@ export function BeatPlayer({ beat, onClose, onBeatSelect }: BeatPlayerProps) {
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Use selected mic if one is chosen, otherwise fall back to default
+      const audioConstraints: boolean | MediaTrackConstraints = selectedMicId
+        ? { deviceId: { exact: selectedMicId } }
+        : true;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+      // Re-enumerate now that permission is granted — browser will expose real labels
+      enumMics();
       const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
         ? "audio/webm;codecs=opus"
         : MediaRecorder.isTypeSupported("audio/webm")
@@ -333,7 +369,7 @@ export function BeatPlayer({ beat, onClose, onBeatSelect }: BeatPlayerProps) {
       if (ac) { ac.close().catch(() => {}); audioContextRef.current = null; }
       setRecordState("idle");
     }
-  }, [recordState, stopVisualizer]);
+  }, [recordState, stopVisualizer, selectedMicId, enumMics]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current?.state === "recording") {
@@ -442,19 +478,39 @@ export function BeatPlayer({ beat, onClose, onBeatSelect }: BeatPlayerProps) {
                         )}
                       </button>
 
-                      {/* Record button */}
+                      {/* Mic picker + Record button */}
                       {(recordState === "idle" || recordState === "requesting") && (
-                        <button
-                          onClick={startRecording}
-                          disabled={recordState === "requesting"}
-                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border bg-surface hover:bg-red-500/10 text-text-muted hover:text-red-400 border-border hover:border-red-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {recordState === "requesting" ? (
-                            <><Loader2 className="w-3.5 h-3.5 animate-spin" />Waiting…</>
-                          ) : (
-                            <><Mic className="w-3.5 h-3.5" />Record</>
+                        <div className="flex items-center gap-1">
+                          {/* Mic device selector — only show when >1 device available */}
+                          {micDevices.length > 1 && (
+                            <div className="relative">
+                              <Mic className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-text-muted z-10" />
+                              <ChevronsUpDown className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 w-2.5 h-2.5 text-text-muted z-10" />
+                              <select
+                                value={selectedMicId}
+                                onChange={(e) => setSelectedMicId(e.target.value)}
+                                disabled={recordState === "requesting"}
+                                title="Choose microphone"
+                                className="appearance-none pl-6 pr-6 py-1 rounded-lg text-xs font-medium bg-surface border border-border text-text-muted hover:border-red-500/30 hover:text-text-main focus:outline-none focus:border-red-500/40 transition-colors cursor-pointer max-w-[140px] truncate disabled:opacity-50"
+                              >
+                                {micDevices.map((m) => (
+                                  <option key={m.deviceId} value={m.deviceId}>{m.label}</option>
+                                ))}
+                              </select>
+                            </div>
                           )}
-                        </button>
+                          <button
+                            onClick={startRecording}
+                            disabled={recordState === "requesting"}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border bg-surface hover:bg-red-500/10 text-text-muted hover:text-red-400 border-border hover:border-red-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {recordState === "requesting" ? (
+                              <><Loader2 className="w-3.5 h-3.5 animate-spin" />Waiting…</>
+                            ) : (
+                              <><Mic className="w-3.5 h-3.5" />Record</>
+                            )}
+                          </button>
+                        </div>
                       )}
 
                       {recordState === "recording" && (
