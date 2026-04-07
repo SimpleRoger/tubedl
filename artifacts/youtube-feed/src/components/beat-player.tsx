@@ -136,27 +136,25 @@ export function BeatPlayer({ beat, onClose, onBeatSelect }: BeatPlayerProps) {
                   {videoExpanded ? "Hide video" : "Show video"}
                 </button>
 
-                <AnimatePresence>
-                  {videoExpanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.25 }}
-                      className="overflow-hidden mt-2"
-                    >
-                      <div className="aspect-video rounded-xl overflow-hidden bg-black">
-                        <iframe
-                          src={`https://www.youtube.com/embed/${beat.videoId}?autoplay=1&rel=0`}
-                          title={beat.title}
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                          className="w-full h-full"
-                        />
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                {/* iframe is ALWAYS in the DOM so autoplay fires immediately on open.
+                    Height animates to show/hide visually — audio keeps playing either way. */}
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: videoExpanded ? "auto" : 0, opacity: videoExpanded ? 1 : 0 }}
+                  transition={{ duration: 0.25 }}
+                  className="overflow-hidden mt-2"
+                >
+                  <div className="aspect-video rounded-xl overflow-hidden bg-black">
+                    <iframe
+                      key={beat.videoId}
+                      src={`https://www.youtube.com/embed/${beat.videoId}?autoplay=1&rel=0`}
+                      title={beat.title}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      className="w-full h-full"
+                    />
+                  </div>
+                </motion.div>
               </div>
 
               {/* Lyrics Notepad */}
