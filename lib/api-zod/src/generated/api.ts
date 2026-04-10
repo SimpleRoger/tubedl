@@ -271,3 +271,36 @@ export const CreateRecordingBody = zod.object({
 export const DeleteRecordingParams = zod.object({
   id: zod.coerce.number(),
 });
+
+/**
+ * @summary List saved videos
+ */
+export const ListSavedVideosResponseItem = zod.object({
+  id: zod.number(),
+  videoId: zod.string(),
+  title: zod.string(),
+  description: zod.string(),
+  thumbnailUrl: zod.string(),
+  channelId: zod.string(),
+  channelName: zod.string(),
+  channelThumbnailUrl: zod.string().nullish(),
+  viewCount: zod.string().nullish(),
+  duration: zod.string().nullish(),
+  publishedAt: zod.coerce.date(),
+  savedAt: zod.coerce.date(),
+});
+export const ListSavedVideosResponse = zod.array(ListSavedVideosResponseItem);
+
+/**
+ * @summary Save a video by URL
+ */
+export const SaveVideoBody = zod.object({
+  url: zod.string().describe("YouTube video URL or video ID"),
+});
+
+/**
+ * @summary Remove a saved video
+ */
+export const RemoveSavedVideoParams = zod.object({
+  videoId: zod.string(),
+});

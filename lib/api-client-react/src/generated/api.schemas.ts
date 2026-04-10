@@ -139,3 +139,23 @@ export const SearchBeatsOrder = {
 export type GetSimilarBeatsParams = {
   title: string;
 };
+
+export interface SavedVideoItem {
+  id: number;
+  videoId: string;
+  title: string;
+  description: string;
+  thumbnailUrl: string;
+  channelId: string;
+  channelName: string;
+  channelThumbnailUrl?: string | null;
+  viewCount?: string | null;
+  duration?: string | null;
+  publishedAt: string;
+  savedAt: string;
+}
+
+export interface SaveVideoBody {
+  /** YouTube video URL or video ID */
+  url: string;
+}

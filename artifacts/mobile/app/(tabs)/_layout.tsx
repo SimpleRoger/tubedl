@@ -28,6 +28,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: "doc.text", selected: "doc.text.fill" }} />
         <Label>Lyrics</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="saved">
+        <Icon sf={{ default: "bookmark", selected: "bookmark.fill" }} />
+        <Label>Saved</Label>
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }
@@ -110,6 +114,18 @@ function ClassicTabLayout() {
               <SymbolView name="doc.text" tintColor={color} size={24} />
             ) : (
               <Feather name="file-text" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
+        name="saved"
+        options={{
+          title: "Saved",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="bookmark" tintColor={color} size={24} />
+            ) : (
+              <Feather name="bookmark" size={22} color={color} />
             ),
         }}
       />

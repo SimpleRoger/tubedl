@@ -29,6 +29,8 @@ import type {
   RecordingItem,
   RequestUploadUrlBody,
   RequestUploadUrlResponse,
+  SavedVideoItem,
+  SaveVideoBody,
   SearchBeatChannelsParams,
   SearchBeatsParams,
   SearchChannelsParams,
@@ -1612,4 +1614,158 @@ export const useDeleteRecording = <
   TContext
 > => {
   return useMutation(getDeleteRecordingMutationOptions(options));
+};
+
+// ─── Saved Videos ────────────────────────────────────────────────────────────
+
+export const getListSavedVideosUrl = () => `/api/saved`;
+
+export const listSavedVideos = async (
+  options?: RequestInit,
+): Promise<SavedVideoItem[]> => {
+  return customFetch<SavedVideoItem[]>(getListSavedVideosUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSavedVideosQueryKey = () =>
+  [`/api/saved`] as const;
+
+export const getListSavedVideosQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSavedVideos>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listSavedVideos>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListSavedVideosQueryKey();
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listSavedVideos>>> = ({
+    signal,
+  }) => listSavedVideos({ signal, ...requestOptions });
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSavedVideos>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export function useListSavedVideos<
+  TData = Awaited<ReturnType<typeof listSavedVideos>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listSavedVideos>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSavedVideosQueryOptions(options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  query.queryKey = queryOptions.queryKey;
+  return query;
+}
+
+export const saveVideo = async (
+  body: SaveVideoBody,
+  options?: RequestInit,
+): Promise<SavedVideoItem> => {
+  return customFetch<SavedVideoItem>(`/api/saved`, {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(body),
+  });
+};
+
+export const getSaveVideoMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof saveVideo>>,
+    TError,
+    SaveVideoBody,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const mutationKey = [`/api/saved`];
+  const { mutation: mutationOptions, request: requestOptions } = options ?? {};
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof saveVideo>>,
+    SaveVideoBody
+  > = (body) => saveVideo(body, requestOptions);
+  return { mutationFn, mutationKey, ...mutationOptions };
+};
+
+export const useSaveVideo = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof saveVideo>>,
+    TError,
+    SaveVideoBody,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof saveVideo>>,
+  TError,
+  SaveVideoBody,
+  TContext
+> => {
+  return useMutation(getSaveVideoMutationOptions(options));
+};
+
+export const removeSavedVideo = async (
+  videoId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(`/api/saved/${videoId}`, {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getRemoveSavedVideoMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeSavedVideo>>,
+    TError,
+    { videoId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const mutationKey = [`/api/saved/:videoId`];
+  const { mutation: mutationOptions, request: requestOptions } = options ?? {};
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof removeSavedVideo>>,
+    { videoId: string }
+  > = ({ videoId }) => removeSavedVideo(videoId, requestOptions);
+  return { mutationFn, mutationKey, ...mutationOptions };
+};
+
+export const useRemoveSavedVideo = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeSavedVideo>>,
+    TError,
+    { videoId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof removeSavedVideo>>,
+  TError,
+  { videoId: string },
+  TContext
+> => {
+  return useMutation(getRemoveSavedVideoMutationOptions(options));
 };

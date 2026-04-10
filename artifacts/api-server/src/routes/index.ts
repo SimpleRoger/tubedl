@@ -6,6 +6,7 @@ import summaryRouter from "./summary";
 import beatChannelsRouter from "./beat-channels";
 import storageRouter from "./storage";
 import recordingsRouter from "./recordings";
+import savedRouter from "./saved";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(summaryRouter);
 router.use(beatChannelsRouter);
 router.use(storageRouter);
 router.use(recordingsRouter);
+router.use(savedRouter);
 
 export default router;

@@ -135,6 +135,55 @@ export async function searchChannels(query: string): Promise<YouTubeChannelSearc
   }));
 }
 
+export async function fetchVideoById(videoId: string): Promise<YouTubeVideo | null> {
+  const apiKey = getApiKey();
+
+  const url = `${YOUTUBE_API_BASE}/videos?part=snippet,statistics,contentDetails&id=${encodeURIComponent(videoId)}&key=${apiKey}`;
+  const resp = await fetch(url);
+  if (!resp.ok) {
+    const body = await resp.text();
+    logger.error({ status: resp.status, body, videoId }, "YouTube fetchVideoById error");
+    throw new Error(`YouTube API error: ${resp.status}`);
+  }
+
+  const data = (await resp.json()) as {
+    items?: Array<{
+      id: string;
+      snippet: {
+        title: string;
+        description: string;
+        publishedAt: string;
+        channelId: string;
+        channelTitle: string;
+        thumbnails?: { medium?: { url: string }; default?: { url: string } };
+      };
+      statistics?: { viewCount?: string };
+      contentDetails?: { duration?: string };
+    }>;
+  };
+
+  if (!data.items || data.items.length === 0) return null;
+
+  const item = data.items[0];
+  const thumbnail =
+    item.snippet.thumbnails?.medium?.url ??
+    item.snippet.thumbnails?.default?.url ??
+    `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+
+  return {
+    videoId: item.id,
+    title: item.snippet.title,
+    description: item.snippet.description,
+    thumbnailUrl: thumbnail,
+    publishedAt: new Date(item.snippet.publishedAt),
+    viewCount: item.statistics?.viewCount ?? null,
+    channelId: item.snippet.channelId,
+    channelName: item.snippet.channelTitle,
+    channelThumbnailUrl: null,
+    duration: item.contentDetails?.duration ?? null,
+  };
+}
+
 export async function fetchPopularVideos(
   channelId: string,
   channelName: string,
