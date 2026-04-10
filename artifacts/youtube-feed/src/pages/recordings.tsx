@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Tv2, Music2, FileText, Mic, Trash2, Download, Play, Loader2, Cloud } from "lucide-react";
+import { Tv2, Music2, FileText, Mic, Trash2, Download, Play, Loader2, Cloud, Bookmark } from "lucide-react";
 import { motion } from "framer-motion";
 import { useRecordings, useDeleteRecording } from "../hooks/use-recordings";
 import type { RecordingItem } from "@workspace/api-client-react";
@@ -137,6 +137,11 @@ export default function Recordings() {
             <span className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-semibold bg-primary/15 text-primary border border-primary/20">
               <Mic className="w-3.5 h-3.5" />Recordings
             </span>
+            <Link href="/saved">
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-medium text-text-muted hover:text-text-main hover:bg-surface-hover transition-colors cursor-pointer">
+                <Bookmark className="w-3.5 h-3.5" />Saved
+              </span>
+            </Link>
           </nav>
         </div>
       </header>
