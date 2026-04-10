@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Plus, Youtube, AlertCircle, RefreshCw, Music2, FileText, Mic } from "lucide-react";
+import { Plus, Youtube, AlertCircle, RefreshCw, Music2, FileText, Mic, Clock, Flame } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "../lib/utils";
 import { useVideos } from "../hooks/use-videos";
@@ -16,9 +16,10 @@ export default function Home() {
   const [selectedChannelId, setSelectedChannelId] = useState<number | undefined>();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [activeVideo, setActiveVideo] = useState<Video | null>(null);
+  const [order, setOrder] = useState<"recent" | "popular">("recent");
   
   const { data: channels } = useChannels();
-  const { data: videos, isLoading: isVideosLoading, isError, error, refetch } = useVideos(selectedChannelId);
+  const { data: videos, isLoading: isVideosLoading, isError, error, refetch } = useVideos(selectedChannelId, order);
 
   // Check if it's an API Key error (usually contains 'key' in a 500 error from Youtube Data API)
   const isKeyError = isError && String(error).toLowerCase().includes("key");
@@ -95,22 +96,53 @@ export default function Home() {
             />
           </div>
 
-          <div className="mb-8 flex items-center justify-between">
+          <div className="mb-8 flex items-center justify-between gap-4 flex-wrap">
             <h2 className="text-2xl font-display font-bold text-text-main">
               {selectedChannelId 
                 ? channels?.find(c => c.id === selectedChannelId)?.name || "Channel Videos" 
-                : "Recent Uploads"}
+                : order === "popular" ? "Most Popular" : "Recent Uploads"}
             </h2>
-            
-            {/* Optional subtle refetch button */}
-            <button 
-              onClick={() => refetch()}
-              disabled={isVideosLoading}
-              className="p-2 text-text-muted hover:text-white rounded-full hover:bg-surface-hover transition-colors disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              title="Refresh feed"
-            >
-              <RefreshCw className={cn("w-5 h-5", isVideosLoading && "animate-spin")} />
-            </button>
+
+            <div className="flex items-center gap-2">
+              {/* Recent / Popular toggle */}
+              {(channels?.length ?? 0) > 0 && (
+                <div className="flex items-center gap-1 bg-surface border border-border rounded-lg p-1">
+                  <button
+                    onClick={() => setOrder("recent")}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+                      order === "recent"
+                        ? "bg-primary text-white shadow"
+                        : "text-text-muted hover:text-text-main hover:bg-surface-hover"
+                    )}
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    Recent
+                  </button>
+                  <button
+                    onClick={() => setOrder("popular")}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+                      order === "popular"
+                        ? "bg-primary text-white shadow"
+                        : "text-text-muted hover:text-text-main hover:bg-surface-hover"
+                    )}
+                  >
+                    <Flame className="w-3.5 h-3.5" />
+                    Popular
+                  </button>
+                </div>
+              )}
+
+              <button 
+                onClick={() => refetch()}
+                disabled={isVideosLoading}
+                className="p-2 text-text-muted hover:text-white rounded-full hover:bg-surface-hover transition-colors disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                title="Refresh feed"
+              >
+                <RefreshCw className={cn("w-5 h-5", isVideosLoading && "animate-spin")} />
+              </button>
+            </div>
           </div>
 
           {/* Error State */}
