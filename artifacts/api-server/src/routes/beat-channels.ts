@@ -2,6 +2,8 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { spawn } from "child_process";
 import path from "path";
+import fs from "fs";
+import os from "os";
 import { db, beatChannelsTable } from "@workspace/db";
 import { AddChannelBody, RemoveChannelParams } from "@workspace/api-zod";
 import { resolveChannelInfo, searchChannels, fetchRecentVideos } from "../lib/youtube";
@@ -182,43 +184,75 @@ router.get("/beats/:videoId/similar", async (req, res): Promise<void> => {
   res.json(similar);
 });
 
-router.get("/beats/:videoId/download", (req, res): void => {
+router.get("/beats/:videoId/download", async (req, res): Promise<void> => {
   const { videoId } = req.params;
   const rawTitle = typeof req.query.title === "string" ? req.query.title : videoId;
   const safeName = rawTitle.replace(/[<>:"/\\|?*\x00-\x1f]/g, "").trim().slice(0, 120) || videoId;
 
-  res.setHeader("Content-Type", "audio/mpeg");
-  res.setHeader("Content-Disposition", `attachment; filename="${safeName}.mp3"`);
-  res.setHeader("X-Content-Type-Options", "nosniff");
+  // yt-dlp cannot post-process (MP3 conversion) when streaming to stdout.
+  // Write to a named temp file so ffmpeg can convert properly, then stream it.
+  const tmpDir = os.tmpdir();
+  const tmpFile = path.join(tmpDir, `tubefeed-${videoId}-${Date.now()}.mp3`);
 
-  const ytdlp = spawn(YTDLP, [
-    "-x",
-    "--audio-format", "mp3",
-    "--audio-quality", "0",
-    "-o", "-",
-    "--no-playlist",
-    "--no-warnings",
-    `https://www.youtube.com/watch?v=${videoId}`,
-  ]);
+  const cleanup = () => { try { fs.unlinkSync(tmpFile); } catch (_) {} };
 
-  ytdlp.stdout.pipe(res);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const ytdlp = spawn(YTDLP, [
+        "-x",
+        "--audio-format", "mp3",
+        "--audio-quality", "0",
+        "-o", tmpFile,
+        "--no-playlist",
+        "--no-warnings",
+        `https://www.youtube.com/watch?v=${videoId}`,
+      ]);
 
-  ytdlp.stderr.on("data", (chunk: Buffer) => {
-    req.log?.debug(`yt-dlp: ${chunk.toString().trim()}`);
-  });
+      const stderrLines: string[] = [];
+      ytdlp.stderr.on("data", (chunk: Buffer) => {
+        stderrLines.push(chunk.toString().trim());
+        req.log?.debug(`yt-dlp: ${chunk.toString().trim()}`);
+      });
 
-  ytdlp.on("error", (err: Error) => {
-    req.log?.error({ err }, "yt-dlp spawn error");
-    if (!res.headersSent) res.status(500).json({ error: "Download failed" });
+      ytdlp.on("error", (err: Error) => reject(err));
+      ytdlp.on("close", (code: number | null) => {
+        if (code !== 0) {
+          reject(new Error(`yt-dlp exited ${code}: ${stderrLines.slice(-3).join(" | ")}`));
+        } else {
+          resolve();
+        }
+      });
+
+      req.on("close", () => { ytdlp.kill("SIGTERM"); reject(new Error("client disconnected")); });
+    });
+
+    if (!fs.existsSync(tmpFile)) {
+      res.status(500).json({ error: "Download produced no output" });
+      return;
+    }
+
+    const stat = fs.statSync(tmpFile);
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Content-Disposition", `attachment; filename="${safeName}.mp3"`);
+    res.setHeader("Content-Length", stat.size);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+
+    const readStream = fs.createReadStream(tmpFile);
+    readStream.pipe(res);
+    readStream.on("close", cleanup);
+    readStream.on("error", (err) => {
+      req.log?.error({ err }, "stream error after download");
+      cleanup();
+      if (!res.writableEnded) res.end();
+    });
+  } catch (err: unknown) {
+    cleanup();
+    const msg = err instanceof Error ? err.message : "Download failed";
+    if (msg === "client disconnected") return;
+    req.log?.error({ err, videoId }, "beat download failed");
+    if (!res.headersSent) res.status(500).json({ error: msg });
     else if (!res.writableEnded) res.end();
-  });
-
-  ytdlp.on("close", (code: number | null) => {
-    if (code !== 0) req.log?.warn({ code, videoId }, "yt-dlp exited non-zero");
-    if (!res.writableEnded) res.end();
-  });
-
-  req.on("close", () => ytdlp.kill("SIGTERM"));
+  }
 });
 
 export default router;
