@@ -45,6 +45,8 @@ export function BeatPlayer({ beat, onClose, onBeatSelect }: BeatPlayerProps) {
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
   const [recordMime, setRecordMime] = useState("audio/webm");
   const [cloudSaveState, setCloudSaveState] = useState<CloudSaveState>("idle");
+  // Take counter — increments on each successful cloud save, resets when beat changes
+  const [takeNumber, setTakeNumber] = useState(1);
   const recordingBlobRef = useRef<Blob | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -211,6 +213,7 @@ export function BeatPlayer({ beat, onClose, onBeatSelect }: BeatPlayerProps) {
       setLyrics(saved);
       setVideoExpanded(false);
       resetRecording();
+      setTakeNumber(1);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [beat?.videoId]);
@@ -390,6 +393,7 @@ export function BeatPlayer({ beat, onClose, onBeatSelect }: BeatPlayerProps) {
       await uploadRecording.mutateAsync({
         blob: recordingBlobRef.current,
         mime: recordMime,
+        takeNumber,
         meta: {
           beatVideoId: beat.videoId,
           beatTitle: beat.title,
@@ -410,11 +414,17 @@ export function BeatPlayer({ beat, onClose, onBeatSelect }: BeatPlayerProps) {
     const ext = recordMime.includes("mp4") ? "m4a" : "webm";
     const anchor = document.createElement("a");
     anchor.href = recordingUrl;
-    anchor.download = `${beat.title} - freestyle.${ext}`;
+    anchor.download = `${beat.title} - take ${takeNumber}.${ext}`;
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
-  }, [recordingUrl, beat, recordMime]);
+  }, [recordingUrl, beat, recordMime, takeNumber]);
+
+  // Advance to the next take: clear the current recording and bump the counter
+  const startNewTake = useCallback(() => {
+    resetRecording();
+    setTakeNumber((n) => n + 1);
+  }, [resetRecording]);
 
   if (!beat) return null;
 
@@ -528,7 +538,7 @@ export function BeatPlayer({ beat, onClose, onBeatSelect }: BeatPlayerProps) {
                             {recordState === "requesting" ? (
                               <><Loader2 className="w-3.5 h-3.5 animate-spin" />Waiting…</>
                             ) : (
-                              <><Mic className="w-3.5 h-3.5" />Record</>
+                              <><Mic className="w-3.5 h-3.5" />Take {takeNumber}</>
                             )}
                           </button>
                         </div>
@@ -588,7 +598,7 @@ export function BeatPlayer({ beat, onClose, onBeatSelect }: BeatPlayerProps) {
                           <div className="mt-2.5 p-3 rounded-xl bg-red-500/5 border border-red-500/15 flex flex-col gap-2.5">
                             <div className="flex items-center justify-between">
                               <span className="text-[10px] font-bold uppercase tracking-widest text-red-400">
-                                Freestyle · {formatSeconds(recordSeconds)}
+                                Take {takeNumber} · {formatSeconds(recordSeconds)}
                               </span>
                             </div>
 
@@ -601,29 +611,43 @@ export function BeatPlayer({ beat, onClose, onBeatSelect }: BeatPlayerProps) {
 
                             <div className="flex items-center gap-2 flex-wrap">
                               {/* Save to cloud */}
-                              <button
-                                onClick={handleSaveToCloud}
-                                disabled={cloudSaveState === "uploading" || cloudSaveState === "saved"}
-                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border ${
-                                  cloudSaveState === "saved"
-                                    ? "bg-green-500/10 text-green-400 border-green-500/20 cursor-default"
-                                    : cloudSaveState === "error"
-                                    ? "bg-red-500/10 text-red-400 border-red-500/20"
-                                    : cloudSaveState === "uploading"
-                                    ? "bg-surface text-text-muted border-border cursor-not-allowed"
-                                    : "bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20"
-                                }`}
-                              >
-                                {cloudSaveState === "uploading" ? (
-                                  <><Loader2 className="w-3 h-3 animate-spin" />Saving…</>
-                                ) : cloudSaveState === "saved" ? (
-                                  <><CheckCircle2 className="w-3 h-3" />Saved to cloud</>
-                                ) : cloudSaveState === "error" ? (
-                                  <><CloudOff className="w-3 h-3" />Retry save</>
-                                ) : (
-                                  <><Cloud className="w-3 h-3" />Save to cloud</>
-                                )}
-                              </button>
+                              {cloudSaveState !== "saved" && (
+                                <button
+                                  onClick={handleSaveToCloud}
+                                  disabled={cloudSaveState === "uploading"}
+                                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border ${
+                                    cloudSaveState === "error"
+                                      ? "bg-red-500/10 text-red-400 border-red-500/20"
+                                      : cloudSaveState === "uploading"
+                                      ? "bg-surface text-text-muted border-border cursor-not-allowed"
+                                      : "bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20"
+                                  }`}
+                                >
+                                  {cloudSaveState === "uploading" ? (
+                                    <><Loader2 className="w-3 h-3 animate-spin" />Saving…</>
+                                  ) : cloudSaveState === "error" ? (
+                                    <><CloudOff className="w-3 h-3" />Retry save</>
+                                  ) : (
+                                    <><Cloud className="w-3 h-3" />Save to cloud</>
+                                  )}
+                                </button>
+                              )}
+
+                              {/* After saved: "Saved ✓" badge + New Take button */}
+                              {cloudSaveState === "saved" && (
+                                <>
+                                  <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/20">
+                                    <CheckCircle2 className="w-3 h-3" />Saved
+                                  </span>
+                                  <button
+                                    onClick={startNewTake}
+                                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all"
+                                  >
+                                    <Mic className="w-3 h-3" />
+                                    Take {takeNumber + 1}
+                                  </button>
+                                </>
+                              )}
 
                               {/* Local download */}
                               <button
@@ -634,14 +658,16 @@ export function BeatPlayer({ beat, onClose, onBeatSelect }: BeatPlayerProps) {
                                 Download
                               </button>
 
-                              {/* Discard */}
-                              <button
-                                onClick={() => resetRecording()}
-                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-text-muted hover:text-red-400 border border-border hover:border-red-500/20 transition-all ml-auto"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                                Discard
-                              </button>
+                              {/* Discard — keeps same take number so you can redo it */}
+                              {cloudSaveState !== "saved" && (
+                                <button
+                                  onClick={() => resetRecording()}
+                                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-text-muted hover:text-red-400 border border-border hover:border-red-500/20 transition-all ml-auto"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  Discard
+                                </button>
+                              )}
                             </div>
                           </div>
                         </motion.div>

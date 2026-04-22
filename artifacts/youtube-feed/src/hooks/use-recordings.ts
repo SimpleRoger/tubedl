@@ -22,15 +22,16 @@ interface UploadRecordingArgs {
   blob: Blob;
   mime: string;
   meta: CreateRecordingBody;
+  takeNumber?: number;
 }
 
 export function useUploadRecording() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ blob, mime, meta }: UploadRecordingArgs) => {
+    mutationFn: async ({ blob, mime, meta, takeNumber = 1 }: UploadRecordingArgs) => {
       // Step 1: get presigned upload URL
       const { uploadURL, objectPath } = await requestUploadUrl({
-        name: `${meta.beatTitle}-freestyle`,
+        name: `${meta.beatTitle}-take-${takeNumber}`,
         size: blob.size,
         contentType: mime,
       });
