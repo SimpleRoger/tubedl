@@ -64,6 +64,7 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
 
     res.status(response.status);
     response.headers.forEach((value, key) => res.setHeader(key, value));
+    res.setHeader("Accept-Ranges", "bytes");
 
     if (response.body) {
       const nodeStream = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
@@ -81,8 +82,7 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
  * GET /storage/objects/*
  *
  * Serve object entities from PRIVATE_OBJECT_DIR.
- * These are served from a separate path from /public-objects and can optionally
- * be protected with authentication or ACL checks based on the use case.
+ * Supports HTTP Range requests so <audio> / <video> seeking works correctly.
  */
 router.get("/storage/objects/*path", async (req: Request, res: Response) => {
   try {
@@ -96,27 +96,45 @@ router.get("/storage/objects/*path", async (req: Request, res: Response) => {
     //   res.status(401).json({ error: "Unauthorized" });
     //   return;
     // }
-    // const canAccess = await objectStorageService.canAccessObjectEntity({
-    //   userId: req.user.id,
-    //   objectFile,
-    //   requestedPermission: ObjectPermission.READ,
-    // });
-    // if (!canAccess) {
-    //   res.status(403).json({ error: "Forbidden" });
-    //   return;
-    // }
 
-    const response = await objectStorageService.downloadObject(objectFile);
+    // Read GCS metadata so we know the total size and content type
+    const [metadata] = await objectFile.getMetadata();
+    const totalSize = Number(metadata.size) || 0;
+    const contentType = (metadata.contentType as string) || "application/octet-stream";
+    const isPublic = false; // private bucket
 
-    res.status(response.status);
-    response.headers.forEach((value, key) => res.setHeader(key, value));
+    const rangeHeader = req.headers.range;
 
-    if (response.body) {
-      const nodeStream = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
-      nodeStream.pipe(res);
-    } else {
-      res.end();
+    if (rangeHeader && totalSize > 0) {
+      // Parse "bytes=start-end"
+      const match = rangeHeader.match(/bytes=(\d*)-(\d*)/);
+      if (match) {
+        const start = match[1] ? parseInt(match[1], 10) : 0;
+        const end = match[2] ? Math.min(parseInt(match[2], 10), totalSize - 1) : totalSize - 1;
+        const chunkSize = end - start + 1;
+
+        res.status(206);
+        res.setHeader("Content-Range", `bytes ${start}-${end}/${totalSize}`);
+        res.setHeader("Accept-Ranges", "bytes");
+        res.setHeader("Content-Length", String(chunkSize));
+        res.setHeader("Content-Type", contentType);
+        res.setHeader("Cache-Control", `private, max-age=3600`);
+
+        const nodeStream = objectFile.createReadStream({ start, end });
+        nodeStream.pipe(res);
+        return;
+      }
     }
+
+    // No Range header — serve full file but advertise range support
+    res.status(200);
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", `private, max-age=3600`);
+    if (totalSize) res.setHeader("Content-Length", String(totalSize));
+
+    const nodeStream = objectFile.createReadStream();
+    nodeStream.pipe(res);
   } catch (error) {
     if (error instanceof ObjectNotFoundError) {
       req.log.warn({ err: error }, "Object not found");
