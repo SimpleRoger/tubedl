@@ -8,27 +8,11 @@ import { db, beatChannelsTable } from "@workspace/db";
 import { AddChannelBody, RemoveChannelParams } from "@workspace/api-zod";
 import { resolveChannelInfo, searchChannels, fetchRecentVideos } from "../lib/youtube";
 
-// yt-dlp is installed at the workspace root via `uv add yt-dlp`.
-// __dirname in the built bundle = <workspace>/artifacts/api-server/dist
-// so three "../" steps reach the workspace root.
-const YTDLP =
-  process.env.YTDLP_PATH ??
-  path.resolve(__dirname, "../../../.pythonlibs/bin/yt-dlp");
-
-// Optional YouTube cookies file — place youtube-cookies.txt in the workspace root
-// to bypass bot detection on restricted videos.
-const COOKIES_FILE = process.env.YTDLP_COOKIES_PATH ??
-  path.resolve(__dirname, "../../../youtube-cookies.txt");
-
-// Persistent cache dir so yt-dlp doesn't re-download the EJS challenge solver
-// on every request — it fetches once and reuses the cached script.
-const YTDLP_CACHE_DIR = process.env.YTDLP_CACHE_DIR ??
-  path.resolve(__dirname, "../../../.ytdlp-cache");
+import { YTDLP_BIN as YTDLP, YTDLP_CACHE_DIR, cookieArgs } from "../lib/ytdlp";
 
 // Pre-warm the EJS remote component cache at startup so the first real
 // download isn't slow. Run in background — never blocks the server.
 function warmEjsCache() {
-  const hasCookies = fs.existsSync(COOKIES_FILE);
   const nodeExec = process.execPath;
   const args = [
     "--simulate",
@@ -37,15 +21,11 @@ function warmEjsCache() {
     "--js-runtimes", `node:${nodeExec}`,
     "--remote-components", "ejs:github",
     "--cache-dir", YTDLP_CACHE_DIR,
-    ...(hasCookies ? ["--cookies", COOKIES_FILE] : []),
+    ...cookieArgs(),
     "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
   ];
   const p = spawn(YTDLP, args, { stdio: "ignore" });
-  p.on("close", (code) => {
-    if (code === 0) {
-      // ejs script is now cached — subsequent downloads skip the GitHub fetch
-    }
-  });
+  p.on("close", (_code) => {});
 }
 warmEjsCache();
 
@@ -246,7 +226,6 @@ router.get("/beats/:videoId/download", async (req, res): Promise<void> => {
   try {
     await new Promise<void>((resolve, reject) => {
       const nodeExec = process.execPath;
-      const hasCookies = fs.existsSync(COOKIES_FILE);
       const ytdlp = spawn(YTDLP, [
         // Download best audio in native format — no ffmpeg conversion step.
         "--format", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
@@ -256,7 +235,7 @@ router.get("/beats/:videoId/download", async (req, res): Promise<void> => {
         "--js-runtimes", `node:${nodeExec}`,
         "--remote-components", "ejs:github",
         "--cache-dir", YTDLP_CACHE_DIR,
-        ...(hasCookies ? ["--cookies", COOKIES_FILE] : []),
+        ...cookieArgs(),
         `https://www.youtube.com/watch?v=${videoId}`,
       ]);
 

@@ -9,14 +9,13 @@ import { db, extractedBeatsTable } from "@workspace/db";
 import { searchVideos } from "../lib/youtube";
 import { objectStorageClient } from "../lib/objectStorage";
 
+import { YTDLP_BIN as YTDLP, YTDLP_CACHE_DIR, cookieArgs } from "../lib/ytdlp";
+
 const router: IRouter = Router();
 
 // Paths
-const YTDLP   = process.env.YTDLP_PATH   ?? path.resolve(__dirname, "../../../.pythonlibs/bin/yt-dlp");
 const PYTHON  = process.env.PYTHON_PATH  ?? path.resolve(__dirname, "../../../.pythonlibs/bin/python3");
 const EXTRACT_SCRIPT = path.resolve(__dirname, "../../../scripts/extract_beat.py");
-const COOKIES_FILE   = process.env.YTDLP_COOKIES_PATH ?? path.resolve(__dirname, "../../../youtube-cookies.txt");
-const YTDLP_CACHE_DIR = process.env.YTDLP_CACHE_DIR   ?? path.resolve(__dirname, "../../../.ytdlp-cache");
 
 // ── In-memory job store ───────────────────────────────────────────────────────
 interface Job {
@@ -80,8 +79,6 @@ function runProcess(cmd: string, args: string[], opts: RunOpts = {}): Promise<st
 }
 
 async function downloadAudio(videoId: string, outDir: string, opts: RunOpts = {}): Promise<string> {
-  const hasCookies = fs.existsSync(COOKIES_FILE);
-  const cookieArgs = hasCookies ? ["--cookies", COOKIES_FILE] : [];
   const url = `https://www.youtube.com/watch?v=${videoId}`;
 
   // Pre-flight check (fast fail ~1-2s for unavailable videos)
@@ -89,7 +86,7 @@ async function downloadAudio(videoId: string, outDir: string, opts: RunOpts = {}
     await runProcess(YTDLP, [
       "--cache-dir", YTDLP_CACHE_DIR,
       "--no-playlist", "--simulate", "--no-warnings",
-      ...cookieArgs, url,
+      ...cookieArgs(), url,
     ], { ...opts, timeoutMs: 30_000 });
   } catch (e: any) {
     const msg = e.message ?? "";
@@ -107,7 +104,7 @@ async function downloadAudio(videoId: string, outDir: string, opts: RunOpts = {}
     "--cache-dir", YTDLP_CACHE_DIR, "--no-playlist",
     "--format", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
     "--no-warnings", "-o", path.join(outDir, "%(id)s.%(ext)s"),
-    ...cookieArgs, url,
+    ...cookieArgs(), url,
   ], { ...opts, timeoutMs: 3 * 60 * 1000 });
 
   const files = fs.readdirSync(outDir).filter((f) => f.startsWith(videoId));

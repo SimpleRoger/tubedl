@@ -1,26 +1,12 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { spawn, execSync } from "child_process";
+import { spawn } from "child_process";
 import { randomUUID } from "crypto";
 import path from "path";
 import fs from "fs";
 import os from "os";
+import { YTDLP_BIN as YTDLP, YTDLP_CACHE_DIR, FFMPEG_DIR, ffmpegArgs, cookieArgs } from "../lib/ytdlp";
 
 const router: IRouter = Router();
-
-const YTDLP  = process.env.YTDLP_PATH  ?? path.resolve(__dirname, "../../../.pythonlibs/bin/yt-dlp");
-
-// Resolve ffmpeg to its containing directory — yt-dlp prefers a dir for --ffmpeg-location
-function resolveFfmpegDir(): string {
-  if (process.env.FFMPEG_PATH) return path.dirname(process.env.FFMPEG_PATH);
-  try {
-    const bin = execSync("which ffmpeg", { encoding: "utf8" }).trim();
-    if (bin) return path.dirname(bin);
-  } catch {}
-  return "";   // empty string → yt-dlp falls back to PATH lookup
-}
-const FFMPEG_DIR = resolveFfmpegDir();
-const COOKIES_FILE = process.env.YTDLP_COOKIES_PATH ?? path.resolve(__dirname, "../../../youtube-cookies.txt");
-const YTDLP_CACHE_DIR = process.env.YTDLP_CACHE_DIR ?? path.resolve(__dirname, "../../../.ytdlp-cache");
 
 // ── Job store ────────────────────────────────────────────────────────────────
 interface DlJob {
@@ -75,9 +61,6 @@ async function runDownload(
 
   try {
     const url = `https://www.youtube.com/watch?v=${videoId}`;
-    const hasCookies = fs.existsSync(COOKIES_FILE);
-    const cookieArgs = hasCookies ? ["--cookies", COOKIES_FILE] : [];
-
     // Build section string: "*1:02-1:13", "*-1:13" (from start), "*1:02-inf" (to end)
     const sectionArgs: string[] = [];
     if (isClip) {
@@ -94,14 +77,14 @@ async function runDownload(
       const child = spawn(YTDLP, [
         "--cache-dir", YTDLP_CACHE_DIR,
         "--no-playlist",
-        ...(FFMPEG_DIR ? ["--ffmpeg-location", FFMPEG_DIR] : []),
+        ...ffmpegArgs(),
         "--format", FORMAT_1080,
         "--merge-output-format", "mp4",
         "--output", outTemplate,
         "--progress",
         "--newline",
         ...sectionArgs,
-        ...cookieArgs,
+        ...cookieArgs(),
         url,
       ]);
 
