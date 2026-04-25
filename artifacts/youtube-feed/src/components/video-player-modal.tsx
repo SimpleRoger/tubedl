@@ -1,13 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X, ExternalLink, Sparkles, Loader2, AlertCircle,
   ChevronDown, ChevronUp, Users, Star, Lightbulb,
   FileText, BookOpen, Zap, CheckCircle2, FileSearch,
+  Download, CheckCircle,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import type { Video } from "@workspace/api-client-react";
 import { formatViews, formatDuration } from "../lib/utils";
+import { useVideoDownload } from "../hooks/use-video-download";
 
 interface StructuredSummary {
   tldr: string;
@@ -76,6 +78,16 @@ export function VideoPlayerModal({ video, onClose }: VideoPlayerModalProps) {
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [descExpanded, setDescExpanded] = useState(false);
+  const { state: dlState, start: startDownload, reset: resetDownload, downloadUrl } = useVideoDownload();
+  const prevVideoId = useRef<string | null>(null);
+
+  // Reset download state when video changes
+  useEffect(() => {
+    if (video?.videoId !== prevVideoId.current) {
+      prevVideoId.current = video?.videoId ?? null;
+      resetDownload();
+    }
+  }, [video?.videoId, resetDownload]);
 
   const isOpen = video !== null;
 
@@ -241,15 +253,65 @@ export function VideoPlayerModal({ video, onClose }: VideoPlayerModalProps) {
                   </div>
                 )}
 
-                <a
-                  href={`https://youtube.com/watch?v=${video.videoId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs text-text-muted hover:text-primary transition-colors"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  Open on YouTube
-                </a>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <a
+                    href={`https://youtube.com/watch?v=${video.videoId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-text-muted hover:text-primary transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Open on YouTube
+                  </a>
+
+                  {/* 1080p video download */}
+                  {dlState.status === "idle" && (
+                    <button
+                      onClick={() => startDownload(video.videoId, video.title)}
+                      className="inline-flex items-center gap-1.5 text-xs text-text-muted hover:text-primary transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Download 1080p
+                    </button>
+                  )}
+
+                  {dlState.status === "running" && (
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 text-xs text-amber-400">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        {dlState.message}
+                      </div>
+                      <div className="w-24 h-1.5 bg-surface-hover rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-amber-400 rounded-full transition-all duration-500"
+                          style={{ width: `${dlState.pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {dlState.status === "done" && downloadUrl && (
+                    <a
+                      href={downloadUrl}
+                      download={dlState.filename ?? `${video.title}.mp4`}
+                      className="inline-flex items-center gap-1.5 text-xs text-green-400 hover:text-green-300 font-semibold transition-colors"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      Save MP4
+                    </a>
+                  )}
+
+                  {dlState.status === "error" && (
+                    <button
+                      onClick={() => startDownload(video.videoId, video.title)}
+                      className="inline-flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition-colors"
+                      title={dlState.error}
+                    >
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      Retry download
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 

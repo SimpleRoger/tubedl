@@ -8,6 +8,7 @@ import storageRouter from "./storage";
 import recordingsRouter from "./recordings";
 import savedRouter from "./saved";
 import extractedBeatsRouter from "./extracted-beats";
+import videoDownloadRouter from "./video-download";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(storageRouter);
 router.use(recordingsRouter);
 router.use(savedRouter);
 router.use(extractedBeatsRouter);
+router.use(videoDownloadRouter);
 
 export default router;
