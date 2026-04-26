@@ -277,10 +277,19 @@ router.get("/beats/:videoId/download", async (req, res): Promise<void> => {
     const ext = path.extname(outFile).replace(".", "").toLowerCase();
     const mime = AUDIO_MIME[ext] ?? "application/octet-stream";
     const dlName = `${safeName}.${ext}`;
+    // RFC 5987: Content-Disposition headers only allow ASCII in the quoted
+    // filename token. Strip non-ASCII chars for the fallback and use
+    // filename*=UTF-8'' percent-encoding so browsers with Unicode support
+    // (Chrome, Firefox, Safari) get the full title.
+    const asciiName = dlName.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "");
+    const encodedName = encodeURIComponent(dlName).replace(/'/g, "%27");
 
     const stat = fs.statSync(outFile);
     res.setHeader("Content-Type", mime);
-    res.setHeader("Content-Disposition", `attachment; filename="${dlName}"`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${asciiName}"; filename*=UTF-8''${encodedName}`
+    );
     res.setHeader("Content-Length", stat.size);
     res.setHeader("X-Content-Type-Options", "nosniff");
 
