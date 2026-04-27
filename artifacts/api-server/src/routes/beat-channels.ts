@@ -8,7 +8,7 @@ import { db, beatChannelsTable } from "@workspace/db";
 import { AddChannelBody, RemoveChannelParams } from "@workspace/api-zod";
 import { resolveChannelInfo, searchChannels, fetchRecentVideos } from "../lib/youtube";
 
-import { YTDLP_BIN as YTDLP, YTDLP_CACHE_DIR, ffmpegArgs, cookieArgs, serverArgs } from "../lib/ytdlp";
+import { getYtdlpBin, YTDLP_CACHE_DIR, ffmpegArgs, cookieArgs, serverArgs } from "../lib/ytdlp";
 
 const router: IRouter = Router();
 
@@ -214,7 +214,7 @@ router.get("/beats/:videoId/download", async (req, res): Promise<void> => {
 
   try {
     await new Promise<void>((resolve, reject) => {
-      const ytdlp = spawn(YTDLP, [
+      const ytdlp = spawn(getYtdlpBin(), [
         "--format", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
         "-o", tmpTemplate,
         "--no-playlist",

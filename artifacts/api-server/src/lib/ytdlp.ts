@@ -4,9 +4,43 @@ import path from "path";
 import { logger } from "./logger";
 
 // ── Binaries ──────────────────────────────────────────────────────────────────
-export const YTDLP_BIN =
-  process.env.YTDLP_PATH ??
-  path.resolve(__dirname, "../../../.pythonlibs/bin/yt-dlp");
+// In production, pip installs yt-dlp to .pythonlibs/bin at server startup
+// (see index.ts ensurePythonDeps). The constant is just a string — the file
+// doesn't have to exist at module-load time, only when a download is spawned.
+function resolveYtdlpBin(): string {
+  if (process.env.YTDLP_PATH) return process.env.YTDLP_PATH;
+
+  const candidates = [
+    // Replit pip target (dev + production)
+    path.resolve(__dirname, "../../../.pythonlibs/bin/yt-dlp"),
+    // pip install --user
+    "/home/runner/.local/bin/yt-dlp",
+    // system pip
+    "/usr/local/bin/yt-dlp",
+    "/usr/bin/yt-dlp",
+  ];
+
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+
+  // Let the shell resolve it via PATH as a last resort
+  return "yt-dlp";
+}
+
+// Lazy getter — called at spawn time (inside route handlers), not at module
+// load time. This means pip can install yt-dlp in the startup IIFE and set
+// YTDLP_PATH before any download is actually attempted.
+export function getYtdlpBin(): string {
+  // Prefer the env var set by the startup installer
+  if (process.env.YTDLP_PATH) return process.env.YTDLP_PATH;
+  return resolveYtdlpBin();
+}
+
+// Keep YTDLP_BIN as a named re-export for backward compat (resolves at import
+// time so may be "yt-dlp" on fresh production containers — use getYtdlpBin()
+// in all spawn calls instead).
+export const YTDLP_BIN = resolveYtdlpBin();
 
 export const YTDLP_CACHE_DIR =
   process.env.YTDLP_CACHE_DIR ??

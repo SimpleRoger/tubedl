@@ -5,7 +5,7 @@ import path from "path";
 import fs from "fs";
 import os from "os";
 import { logger } from "../lib/logger";
-import { YTDLP_BIN as YTDLP, YTDLP_CACHE_DIR, FFMPEG_DIR, ffmpegArgs, cookieArgs, serverArgs } from "../lib/ytdlp";
+import { getYtdlpBin, YTDLP_CACHE_DIR, FFMPEG_DIR, ffmpegArgs, cookieArgs, serverArgs } from "../lib/ytdlp";
 
 const router: IRouter = Router();
 
@@ -75,7 +75,7 @@ async function runDownload(
     const outTemplate = path.join(tmpDir, "%(title)s [%(height)sp].%(ext)s");
 
     await new Promise<void>((resolve, reject) => {
-      const child = spawn(YTDLP, [
+      const child = spawn(getYtdlpBin(), [
         "--cache-dir", YTDLP_CACHE_DIR,
         "--no-playlist",
         ...serverArgs(),

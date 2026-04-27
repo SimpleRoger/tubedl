@@ -9,7 +9,7 @@ import { db, extractedBeatsTable } from "@workspace/db";
 import { searchVideos } from "../lib/youtube";
 import { objectStorageClient } from "../lib/objectStorage";
 
-import { YTDLP_BIN as YTDLP, YTDLP_CACHE_DIR, cookieArgs, serverArgs } from "../lib/ytdlp";
+import { getYtdlpBin, YTDLP_CACHE_DIR, cookieArgs, serverArgs } from "../lib/ytdlp";
 
 const router: IRouter = Router();
 
@@ -83,7 +83,7 @@ async function downloadAudio(videoId: string, outDir: string, opts: RunOpts = {}
 
   // Pre-flight check (fast fail ~1-2s for unavailable videos)
   try {
-    await runProcess(YTDLP, [
+    await runProcess(getYtdlpBin(), [
       "--cache-dir", YTDLP_CACHE_DIR,
       "--no-playlist", "--simulate", "--no-warnings",
       ...serverArgs(), ...cookieArgs(), url,
@@ -100,7 +100,7 @@ async function downloadAudio(videoId: string, outDir: string, opts: RunOpts = {}
   }
 
   // Actual download
-  await runProcess(YTDLP, [
+  await runProcess(getYtdlpBin(), [
     "--cache-dir", YTDLP_CACHE_DIR, "--no-playlist",
     "--format", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
     "--no-warnings", "-o", path.join(outDir, "%(id)s.%(ext)s"),
