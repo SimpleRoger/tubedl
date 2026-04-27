@@ -99,20 +99,32 @@ export const cookieArgs = authArgs;
  * Extra yt-dlp args applied to every YouTube download.
  *
  * player_js_variant=tv — forces the TV player JavaScript for n-challenge solving.
- * YouTube player 4e51e895's "main"/"es5" variants break EJS (yt-dlp#15814);
- * the "tv" variant is unaffected. Deno (now installed via Nix) is auto-detected
- * by yt-dlp and used as the JS challenge solver.
  *
- * --impersonate chrome — uses curl_cffi (0.13.0 installed in .pythonlibs) to
- * send a real Chrome TLS fingerprint. Without this, Replit's production server
- * IPs are flagged by YouTube's bot detection and requests are rejected with
- * "Sign in to confirm you're not a bot" even when valid cookies are provided.
- * curl_cffi appears as a Request Handler when yt-dlp detects version 0.13.0.
+ * --impersonate chrome — curl_cffi TLS fingerprint (helps on some IPs).
+ *
+ * --proxy — when YTDLP_PROXY is set, routes all yt-dlp traffic through that
+ * proxy URL (e.g. socks5://user:pass@host:port or http://user:pass@host:port).
+ * This is the primary fix for Replit production IP blocks: YouTube blocks
+ * known datacenter IP ranges regardless of cookies; a residential or shared
+ * proxy from a different range bypasses this entirely.
+ *
+ * Get a free shared proxy at https://webshare.io (10 free proxies, no card).
+ * Set the YTDLP_PROXY secret to the proxy URL shown in your Webshare dashboard.
  */
 export function serverArgs(): string[] {
-  return [
+  const args: string[] = [
     "--extractor-args", "youtube:player_js_variant=tv",
     "--impersonate", "chrome",
   ];
+
+  const proxy = process.env.YTDLP_PROXY?.trim();
+  if (proxy) {
+    args.push("--proxy", proxy);
+    logger.info({ proxy: proxy.replace(/:[^:@]+@/, ":***@") }, "yt-dlp using proxy");
+  } else {
+    logger.warn("YTDLP_PROXY not set — downloads may fail on production IPs");
+  }
+
+  return args;
 }
 
