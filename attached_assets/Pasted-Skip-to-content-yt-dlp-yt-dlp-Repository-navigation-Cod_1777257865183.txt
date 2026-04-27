@@ -1,0 +1,264 @@
+Skip to content
+yt-dlp
+yt-dlp
+Repository navigation
+Code
+Issues
+1.9k
+ (1.9k)
+Pull requests
+598
+ (598)
+Agents
+Actions
+Projects
+Wiki
+Security and quality
+8
+ (8)
+Insights
+[Youtube] n challenge solver failed in spite of prerequisites #15684
+Not planned
+Not planned
+[Youtube] n challenge solver failed in spite of prerequisites
+#15684
+@FlashFried
+Description
+FlashFried
+opened on Jan 26
+Checklist
+
+I'm reporting that yt-dlp is broken on a supported site
+
+I've verified that I have updated yt-dlp to nightly or master (update instructions)
+
+I've checked that all provided URLs are playable in a browser with the same IP and same login details
+
+I've checked that all URLs and arguments with special characters are properly quoted or escaped
+
+I've searched known issues, the FAQ, and the bugtracker for similar issues including closed ones. DO NOT post duplicates
+
+I've read the policy against AI/LLM contributions and understand I may be blocked from the repository if it is violated
+
+I've read about sharing account credentials and I'm willing to share it if required
+Region
+USA
+
+Provide a description that is worded well enough to be understood
+I have been trying to run yt-dlp recently and it keeps giving me the same error in spite of having both Deno (It keeps saying unavailable) and an EJS Solver installed.
+
+Provide verbose output that clearly demonstrates the problem
+
+Run your yt-dlp command with -vU flag added (yt-dlp -vU <your command line>)
+
+If using API, add 'verbose': True to YoutubeDL params instead
+
+Copy the WHOLE output (starting with [debug] Command-line config) and insert it below
+Complete Verbose Output
+[debug] Command-line config: ['-vU', '-f', 'mp4', 'https://www.youtube.com/watch?v=svmTo99_Vxg']
+[debug] User config "C:\Users\immor\yt-dlp.conf": ['-o', 'd:\\youtube-dl\\Export\\%(webpage_url_domain)s\\%(channel)s\\%(artist)s\\%(album)s\\%(title)s - %(channel,artist,album)s.%(ext)s', '--update', '--retries', '20', '--cookies-from-browser', 'opera', '--write-thumbnail', '--sleep-interval', '5', '--max-sleep-interval', '8', '--remote-components', 'ejs:github', '--js-runtimes', 'deno:/path/to/deno']
+[debug] Encodings: locale cp1252, fs utf-8, pref cp1252, out utf-8, error utf-8, screen utf-8
+[debug] yt-dlp version stable@2025.12.08 from yt-dlp/yt-dlp [7a52ff29d] (win_exe)
+[debug] Python 3.10.11 (CPython AMD64 64bit) - Windows-10-10.0.26200-SP0 (OpenSSL 1.1.1t  7 Feb 2023)
+[debug] exe versions: ffmpeg 2023-09-29-git-40aa451154-full_build-www.gyan.dev (setts), ffprobe 2023-09-29-git-40aa451154-full_build-www.gyan.dev, phantomjs 2.1.1
+[debug] Optional libraries: Cryptodome-3.23.0, brotli-1.2.0, certifi-2025.11.12, curl_cffi-0.13.0, mutagen-1.47.0, requests-2.32.5, sqlite3-3.40.1, urllib3-2.6.0, websockets-15.0.1, yt_dlp_ejs-0.3.2
+[debug] JS runtimes: none
+[debug] Proxy map: {}
+Extracting cookies from opera
+[debug] Extracting cookies from: "C:\Users\immor\AppData\Roaming\Opera Software\Opera Stable\Default\Network\Cookies"
+[debug] Found local state file at "C:\Users\immor\AppData\Roaming\Opera Software\Opera Stable\Local State"
+Extracted 1271 cookies from opera
+[debug] cookie version breakdown: {'v10': 1305, 'other': 0, 'unencrypted': 0}
+[debug] Request Handlers: urllib, requests, websockets, curl_cffi
+[debug] Plugin directories: none
+WARNING: "-f mp4" selects the best pre-merged mp4 format which is often not what's intended.
+         Pre-merged mp4 formats are not available from all sites, or may only be available in lower quality.
+         To prioritize the best h264 video and aac audio in an mp4 container, use "-t mp4" instead.
+         If you know what you are doing and want a pre-merged mp4 format, use "-f b[ext=mp4]" instead to suppress this warning
+[debug] Loaded 1854 extractors
+[debug] Fetching release info: https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest
+Latest version: stable@2025.12.08 from yt-dlp/yt-dlp
+yt-dlp is up to date (stable@2025.12.08 from yt-dlp/yt-dlp)
+[debug] [youtube] Found YouTube account cookies
+[debug] [youtube] [pot] PO Token Providers: none
+[debug] [youtube] [pot] PO Token Cache Providers: memory
+[debug] [youtube] [pot] PO Token Cache Spec Providers: webpo
+[debug] [youtube] [jsc] JS Challenge Providers: bun (unavailable), deno (unavailable), node (unavailable), quickjs (unavailable)
+[youtube] Extracting URL: https://www.youtube.com/watch?v=svmTo99_Vxg
+[youtube] svmTo99_Vxg: Downloading webpage
+[debug] [youtube] Detected YouTube Premium subscription
+[debug] [youtube] Forcing "main" player JS variant for player c9168c90
+        original url = /s/player/c9168c90/player_es6.vflset/en_US/base.js
+[youtube] svmTo99_Vxg: Downloading tv downgraded player API JSON
+[youtube] svmTo99_Vxg: Downloading web creator player API JSON
+WARNING: [youtube] svmTo99_Vxg: n challenge solving failed: Some formats may be missing. Ensure you have a supported JavaScript runtime and challenge solver script distribution installed. Review any warnings presented before this message. For more details, refer to  https://github.com/yt-dlp/yt-dlp/wiki/EJS
+WARNING: Only images are available for download. use --list-formats to see them
+[debug] Sort order given by extractor: quality, res, fps, hdr:12, source, vcodec, channels, acodec, lang, proto
+[debug] Formats sorted by: hasvid, ie_pref, quality, res, fps, hdr:12(7), source, vcodec, channels, acodec, lang, proto, size, br, asr, vext, aext, hasaud, id
+ERROR: [youtube] svmTo99_Vxg: Requested format is not available. Use --list-formats for a list of available formats
+Traceback (most recent call last):
+  File "yt_dlp\YoutubeDL.py", line 1696, in wrapper
+  File "yt_dlp\YoutubeDL.py", line 1852, in __extract_info
+  File "yt_dlp\YoutubeDL.py", line 1911, in process_ie_result
+  File "yt_dlp\YoutubeDL.py", line 3051, in process_video_result
+yt_dlp.utils.ExtractorError: [youtube] svmTo99_Vxg: Requested format is not available. Use --list-formats for a list of available formats
+Activity
+
+FlashFried
+added 
+site-bug
+Issue with a specific website
+ 
+triage
+Untriaged issue
+ on Jan 26
+bashonly
+bashonly commented on Jan 26
+bashonly
+on Jan 26
+Member
+in spite of having both Deno (It keeps saying unavailable) and an EJS Solver installed.
+
+How did you install Deno?
+
+
+I've verified that I have updated yt-dlp to nightly or master (update instructions)
+Your log says otherwise
+
+
+bashonly
+added 
+incomplete
+Further information is needed
+ and removed 
+site-bug
+Issue with a specific website
+ 
+triage
+Untriaged issue
+ on Jan 26
+Adifagos
+Adifagos commented on Jan 26
+Adifagos
+on Jan 26 · edited by Adifagos
+Works just fine here:
+(Python 3.14 + Deno 2.6.6 + ffmpeg/probe 8.01)
+
+user@User-MacBook-Wired ~ % yt-dlp -vU 'https://www.youtube.com/watch?v=svmTo99_Vxg'
+[debug] Command-line config: ['-vU', 'https://www.youtube.com/watch?v=svmTo99_Vxg']
+[debug] User config "/Users/user/.config/yt-dlp/config": ['-P', '/Users/user/Downloads']
+[debug] Encodings: locale UTF-8, fs utf-8, pref UTF-8, out utf-8, error utf-8, screen utf-8
+[debug] yt-dlp version stable@2025.12.08 from yt-dlp/yt-dlp [7a52ff2] (darwin_exe)
+[debug] Python 3.14.0 (CPython arm64 64bit) - macOS-26.2-arm64-arm-64bit-Mach-O (OpenSSL 3.0.18 30 Sep 2025)
+[debug] exe versions: ffmpeg 8.0.1-https (setts), ffprobe 8.0.1-https
+[debug] Optional libraries: Cryptodome-3.23.0, brotli-1.2.0, certifi-2025.11.12, curl_cffi-0.13.0, mutagen-1.47.0, requests-2.32.5, sqlite3-3.50.4, urllib3-2.6.0, websockets-15.0.1, yt_dlp_ejs-0.3.2
+[debug] JS runtimes: deno-2.6.6
+[debug] Proxy map: {}
+[debug] Request Handlers: urllib, requests, websockets, curl_cffi
+[debug] Plugin directories: none
+[debug] Loaded 1854 extractors
+[debug] Fetching release info: https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest
+Latest version: stable@2025.12.08 from yt-dlp/yt-dlp
+yt-dlp is up to date (stable@2025.12.08 from yt-dlp/yt-dlp)
+[debug] [youtube] [pot] PO Token Providers: none
+[debug] [youtube] [pot] PO Token Cache Providers: memory
+[debug] [youtube] [pot] PO Token Cache Spec Providers: webpo
+[debug] [youtube] [jsc] JS Challenge Providers: bun (unavailable), deno, node (unavailable), quickjs (unavailable)
+[youtube] Extracting URL: https://www.youtube.com/watch?v=svmTo99_Vxg
+[youtube] svmTo99_Vxg: Downloading webpage
+[youtube] svmTo99_Vxg: Downloading tv client config
+[debug] [youtube] Forcing "main" player JS variant for player c9168c90
+original url = /s/player/c9168c90/player_es6.vflset/en_US/base.js
+[youtube] svmTo99_Vxg: Downloading player c9168c90-main
+[youtube] svmTo99_Vxg: Downloading tv player API JSON
+[debug] [youtube] svmTo99_Vxg: tv player response playability status: LOGIN_REQUIRED
+[youtube] svmTo99_Vxg: Downloading android sdkless player API JSON
+[debug] [youtube] svmTo99_Vxg: Detected experiment to bind GVS PO Token to video id.
+WARNING: [youtube] svmTo99_Vxg: Some web client https formats have been skipped as they are missing a url. YouTube is forcing SABR streaming for this client. See #12482 for more details
+[debug] Sort order given by extractor: quality, res, fps, hdr:12, source, vcodec, channels, acodec, lang, proto
+[debug] Formats sorted by: hasvid, ie_pref, quality, res, fps, hdr:12(7), source, vcodec, channels, acodec, lang, proto, size, br, asr, vext, aext, hasaud, id
+[debug] Default format spec: bestvideo*+bestaudio/best
+[info] svmTo99_Vxg: Downloading 1 format(s): 399+251
+[debug] Invoking http downloader on "https://rr1---sn-vuxbavcx-5uid.googlevideo.com/videoplayback?expire=1769446728&ei=6Eh3aYWZM8ufp-oPi7n1WA&ip=94.71.119.122&id=o-AMHastYwzsTtMlFELg3L8cyzbnePaKmhVQM0z31cAhnC&itag=399&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=210&met=1769425128%2C&mh=2u&mm=31%2C29&mn=sn-vuxbavcx-5uid%2Csn-4g5ednk6&ms=au%2Crdu&mv=m&mvi=1&pl=20&rms=au%2Cau&initcwndbps=1666250&bui=AW-iu_o_2HLnHHr507c0PTNnaDDAMTQnZHtz8ptjSD_NrfvGgIGHpWt05VSqhPEXDbmExjblcYmo6OWU&spc=q5xjPAEKYszU&vprv=1&svpuc=1&mime=video%2Fmp4&rqh=1&gir=yes&clen=182673389&dur=2163.461&lmt=1769416106928796&mt=1769424776&fvip=2&keepalive=yes&fexp=51552689%2C51565115%2C51565682%2C51580968&c=ANDROID&txp=5537534&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJEij0EwRQIgQ7tHxEyMZy1vu2qlfIZHu-LhRBrL-hp7YSbxaNQOm-gCIQCZYOKmYvXge2t_-OREgOLLKDuO4yjGbeL1tGT7c32p5w%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRQIgXSWnVCmqW9KjZ0yjnVFrH4UvyPsEFE5_w8IE8JxOwDgCIQCI_MUZyKuB-uMxvfKVYjhnRBgO9rrY1Qr_S0h05PEzxQ%3D%3D"
+[download] Destination: /Users/user/Downloads/Why Society has more toxic people than ever before [svmTo99_Vxg].f399.mp4
+[download] 100% of 174.21MiB in 00:00:11 at 15.34MiB/s
+[debug] Invoking http downloader on "https://rr1---sn-vuxbavcx-5uid.googlevideo.com/videoplayback?expire=1769446728&ei=6Eh3aYWZM8ufp-oPi7n1WA&ip=94.71.119.122&id=o-AMHastYwzsTtMlFELg3L8cyzbnePaKmhVQM0z31cAhnC&itag=251&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=210&met=1769425128%2C&mh=2u&mm=31%2C29&mn=sn-vuxbavcx-5uid%2Csn-4g5ednk6&ms=au%2Crdu&mv=m&mvi=1&pl=20&rms=au%2Cau&initcwndbps=1666250&bui=AW-iu_o_2HLnHHr507c0PTNnaDDAMTQnZHtz8ptjSD_NrfvGgIGHpWt05VSqhPEXDbmExjblcYmo6OWU&spc=q5xjPAEKYszU&vprv=1&svpuc=1&mime=audio%2Fwebm&rqh=1&gir=yes&clen=37646019&dur=2163.521&lmt=1769410548994645&mt=1769424776&fvip=2&keepalive=yes&fexp=51552689%2C51565115%2C51565682%2C51580968&c=ANDROID&txp=5532534&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJEij0EwRAIgeHtc69-ZIkEQnAynRBFXQLZMGh9_xL_Y5afHrzXFoNACIDbvJyx9kBWZm-p6GB0BeJMQWdbpsXMV1WA8KAVuEu09&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRQIgXSWnVCmqW9KjZ0yjnVFrH4UvyPsEFE5_w8IE8JxOwDgCIQCI_MUZyKuB-uMxvfKVYjhnRBgO9rrY1Qr_S0h05PEzxQ%3D%3D"
+[download] Destination: /Users/user/Downloads/Why Society has more toxic people than ever before [svmTo99_Vxg].f251.webm
+[download] 100% of 35.90MiB in 00:00:02 at 13.24MiB/s
+[Merger] Merging formats into "/Users/user/Downloads/Why Society has more toxic people than ever before [svmTo99_Vxg].webm"
+[debug] ffmpeg command line: ffmpeg -y -loglevel repeat+info -i 'file:/Users/user/Downloads/Why Society has more toxic people than ever before [svmTo99_Vxg].f399.mp4' -i 'file:/Users/user/Downloads/Why Society has more toxic people than ever before [svmTo99_Vxg].f251.webm' -c copy -map 0:v:0 -map 1:a:0 -movflags +faststart 'file:/Users/user/Downloads/Why Society has more toxic people than ever before [svmTo99_Vxg].temp.webm'
+Deleting original file /Users/user/Downloads/Why Society has more toxic people than ever before [svmTo99_Vxg].f399.mp4 (pass -k to keep)
+Deleting original file /Users/user/Downloads/Why Society has more toxic people than ever before [svmTo99_Vxg].f251.webm (pass -k to keep)
+
+ruben1PvP
+ruben1PvP commented on Jan 26
+ruben1PvP
+on Jan 26 · edited by ruben1PvP
+'--js-runtimes', 'deno:/path/to/deno'
+
+This is a placeholder. You have to replace "/path/to/deno" with the actual path to your deno installation.
+
+And this is not pertinent to your issue but if you want mp4 (h264+aac) use -t mp4, not -f mp4.
+
+
+bashonly
+closed this as not plannedon Jan 27
+kplngyi
+kplngyi commented on Feb 10
+kplngyi
+on Feb 10
+in spite of having both Deno (It keeps saying unavailable) and an EJS Solver installed.
+
+How did you install Deno?
+
+
+I've verified that I have updated yt-dlp to nightly or master (update instructions)
+Your log says otherwise
+Thanks
+
+SimpleRoger
+Add a comment
+new Comment
+Markdown input: edit mode selected.
+Write
+Preview
+Use Markdown to format your comment
+Remember, contributions to this repository should follow its contributing guidelines.
+Metadata
+Assignees
+No one assigned
+Labels
+incomplete
+Further information is needed
+Type
+No type
+Projects
+No projects
+Milestone
+No milestone
+Relationships
+None yet
+Development
+No branches or pull requests
+NotificationsCustomize
+You're not receiving notifications from this thread.
+
+Participants
+@FlashFried
+@kplngyi
+@ruben1PvP
+@bashonly
+@Adifagos
+Issue actions
+Footer
+© 2026 GitHub, Inc.
+Footer navigation
+Terms
+Privacy
+Security
+Status
+Community
+Docs
+Contact
+Manage cookies
+Do not share my personal information

@@ -1,0 +1,326 @@
+Skip to content
+yt-dlp
+yt-dlp
+Repository navigation
+Code
+Issues
+1.9k
+ (1.9k)
+Pull requests
+598
+ (598)
+Agents
+Actions
+Projects
+Wiki
+Security and quality
+8
+ (8)
+Insights
+[youtube] 4e51e895: Error solving n challenge request: "found 0 sig function possibilities" #15814
+Closed
+#15818
+Closed
+[youtube] 4e51e895: Error solving n challenge request: "found 0 sig function possibilities"
+#15814
+#15818
+@jirih
+Description
+jirih
+opened on Feb 4
+Checklist
+
+I'm reporting that yt-dlp is broken on a supported site
+
+I've verified that I have updated yt-dlp to nightly or master (update instructions)
+
+I've checked that all provided URLs are playable in a browser with the same IP and same login details
+
+I've checked that all URLs and arguments with special characters are properly quoted or escaped
+
+I've searched known issues, the FAQ, and the bugtracker for similar issues including closed ones. DO NOT post duplicates
+
+I've read the policy against AI/LLM contributions and understand I may be blocked from the repository if it is violated
+
+I've read about sharing account credentials and I'm willing to share it if required
+Region
+possibly world
+
+Provide a description that is worded well enough to be understood
+Video looks normal in the browser. Deno required and used. No previous problems with Deno.
+
+WARNING: [youtube] [jsc] Error solving n challenge request using "deno" provider: Error running deno process (returncode: 1): error: Uncaught (in promise) "found 0 sig function possibilities".
+
+deno --version
+deno 2.6.8 (stable, release, x86_64-pc-windows-msvc)
+v8 14.5.201.2-rusty
+typescript 5.9.2
+
+Provide verbose output that clearly demonstrates the problem
+
+Run your yt-dlp command with -vU flag added (yt-dlp -vU <your command line>)
+
+If using API, add 'verbose': True to YoutubeDL params instead
+
+Copy the WHOLE output (starting with [debug] Command-line config) and insert it below
+Complete Verbose Output
+[debug] Command-line config: ['-vU', 'https://www.youtube.com/watch?v=Ouj9vyFHWF4', '-F', '--cookies', 'www.youtube.com_cookies.txt']
+[debug] Home config "yt-dlp.conf": ['--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36', '--no-check-certificate', '-o', '%(autonumber)03d_%(title).240s.%(ext)s', '--no-mtime', '--audio-multistreams', '--format', 'bestvideo[ext=mp4][height<=1080][fps<=30]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080][fps<=30]/best[height<=1080][fps<=30]/best/bestaudio+bestvideo', '--convert-subtitles', 'srt', '--merge-output-format', 'mkv', '--remux-video', 'mkv', '--ffmpeg-location', 'ffmpeg.exe', '--all-subs', '--compat-options', 'no-live-chat', '--live-from-start', '-i']
+[debug] Encodings: locale cp1252, fs utf-8, pref cp1252, out utf-8, error utf-8, screen utf-8
+[debug] yt-dlp version nightly@2026.01.31.233334 from yt-dlp/yt-dlp-nightly-builds [8eb794366] (win_exe)
+[debug] Compatibility options: no-live-chat
+[debug] Python 3.10.11 (CPython AMD64 64bit) - Windows-10-10.0.19045-SP0 (OpenSSL 1.1.1t  7 Feb 2023)
+[debug] exe versions: ffmpeg 7.0.1-full_build-www.gyan.dev (setts), ffprobe 7.0.1-full_build-www.gyan.dev
+[debug] Optional libraries: Cryptodome-3.23.0, brotli-1.2.0, certifi-2026.01.04, curl_cffi-0.14.0, mutagen-1.47.0, requests-2.32.5, sqlite3-3.40.1, urllib3-2.6.3, websockets-16.0, yt_dlp_ejs-0.4.0
+[debug] JS runtimes: deno-2.6.8
+[debug] Proxy map: {}
+[debug] Request Handlers: urllib, requests, websockets, curl_cffi
+[debug] Plugin directories: none
+[debug] Loaded 1856 extractors
+[debug] Fetching release info: https://api.github.com/repos/yt-dlp/yt-dlp-nightly-builds/releases/latest
+Latest version: nightly@2026.01.31.233334 from yt-dlp/yt-dlp-nightly-builds
+yt-dlp is up to date (nightly@2026.01.31.233334 from yt-dlp/yt-dlp-nightly-builds)
+[debug] [youtube] Found YouTube account cookies
+[debug] [youtube] [pot] PO Token Providers: none
+[debug] [youtube] [pot] PO Token Cache Providers: memory
+[debug] [youtube] [pot] PO Token Cache Spec Providers: webpo
+[debug] [youtube] [jsc] JS Challenge Providers: bun (unavailable), deno, node (unavailable), quickjs (unavailable)
+[youtube] Extracting URL: https://www.youtube.com/watch?v=Ouj9vyFHWF4
+[youtube] Ouj9vyFHWF4: Downloading webpage
+[debug] [youtube] Forcing "main" player JS variant for player 4e51e895
+        original url = /s/player/4e51e895/player_es6.vflset/en_US/base.js
+[youtube] Ouj9vyFHWF4: Downloading tv downgraded player API JSON
+[debug] [youtube] Ouj9vyFHWF4: Detected a 15s ad for web
+[debug] [youtube] Ouj9vyFHWF4: Detected a 15s ad skippable after 5s for web
+[youtube] Ouj9vyFHWF4: Downloading web safari player API JSON
+[debug] [youtube] Ouj9vyFHWF4: Detected a 6s ad skippable after 5s for web_safari
+[youtube] Ouj9vyFHWF4: Downloading player 4e51e895-main
+[youtube] [jsc:deno] Solving JS challenges using deno
+[debug] [youtube] [jsc:deno] Using challenge solver lib script v0.4.0 (source: python package, variant: minified)
+[debug] [youtube] [jsc:deno] Using challenge solver core script v0.4.0 (source: python package, variant: minified)
+[debug] [youtube] [jsc:deno] Running deno: 'deno.EXE' run --ext=js --no-code-cache --no-prompt --no-remote --no-lock --node-modules-dir=none --no-config --no-npm --cached-only --unsafely-ignore-certificate-errors -
+WARNING: [youtube] [jsc] Error solving n challenge request using "deno" provider: Error running deno process (returncode: 1): error: Uncaught (in promise) "found 0 sig function possibilities".
+         input = NChallengeInput(player_url='https://www.youtube.com/s/player/4e51e895/player_ias.vflset/en_US/base.js', challenges=['fqFsJBacNCS5QHcEV', 'aEf9A9ja7LIm-Dgrh', 'VJhrqjO0akGmEZ2co', 'actF5v2paAZeKT_zc', 'fc1eoQltYOEjHRXhB'])
+         Please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+WARNING: [youtube] Ouj9vyFHWF4: n challenge solving failed: Some formats may be missing. Ensure you have a supported JavaScript runtime and challenge solver script distribution installed. Review any warnings presented before this message. For more details, refer to  https://github.com/yt-dlp/yt-dlp/wiki/EJS
+[debug] [youtube] Ouj9vyFHWF4: Detected experiment to bind GVS PO Token to video ID for web client
+[debug] [youtube] Ouj9vyFHWF4: Some web client https formats have been skipped as they are missing a URL. YouTube is forcing SABR streaming for this client. See  https://github.com/yt-dlp/yt-dlp/issues/12482  for more details
+[debug] [youtube] Ouj9vyFHWF4: Some web_safari client https formats have been skipped as they are missing a URL. YouTube is forcing SABR streaming for this client. See  https://github.com/yt-dlp/yt-dlp/issues/12482  for more details
+WARNING: Only images are available for download. use --list-formats to see them
+[debug] Sort order given by extractor: quality, res, fps, hdr:12, source, vcodec, channels, acodec, lang, proto
+[debug] Formats sorted by: hasvid, ie_pref, quality, res, fps, hdr:12(7), source, vcodec, channels, acodec, lang, proto, size, br, asr, vext, aext, hasaud, id
+[info] Available formats for Ouj9vyFHWF4:
+ID  EXT   RESOLUTION FPS │ PROTO │ VCODEC MORE INFO
+────────────────────────────────────────────────────
+sb3 mhtml 48x27        0 │ mhtml │ images storyboard
+sb2 mhtml 80x45        0 │ mhtml │ images storyboard
+sb1 mhtml 160x90       0 │ mhtml │ images storyboard
+sb0 mhtml 320x180      0 │ mhtml │ images storyboard
+Pinned by
+bashonly
+@bashonlybashonly
+on Feb 4
+This is now "fixed" in version 2026.02.04. Update!
+Player 4e51e895 broke ejs 0.4.0 with these variants:
+
+main / es5
+tce
+tcc
+These variants of 4e51e895 do not cause any breakage:
+
+es6
+tv
+tv-es6
+phone
+yt-dlp version 2026.02.04 (via 1a895c1) works around this issue by forcing the tv player JS variant.
+
+Support for the broken variants of the latest player versions still needs to be properly added in ejs.
+
+View full comment 
+Activity
+
+jirih
+added 
+site-bug
+Issue with a specific website
+ 
+triage
+Untriaged issue
+ on Feb 4
+
+DTrombett
+added 
+site:youtube
+ and removed 
+triage
+Untriaged issue
+ on Feb 4
+DTrombett
+DTrombett commented on Feb 4
+DTrombett
+on Feb 4 · edited by bashonly
+Member
+This is an issue with YouTube Player 4e51e895 extraction.
+
+As a workaround you can add this your command:
+
+--extractor-args "youtube:player_js_variant=tv"
+
+DTrombett
+marked [youtube] Problem with chrome cookies downloading new videos #15815 as a duplicate of this issue on Feb 4
+
+DTrombett
+mentioned this on Feb 4
+[youtube] Problem with chrome cookies downloading new videos #15815
+
+bashonly
+added 
+high-priority
+ on Feb 4
+
+bashonly
+marked [youtube] failed ejs challenge: found 0 sig function possibilities #15816 as a duplicate of this issue on Feb 4
+
+bashonly
+mentioned this on Feb 4
+[youtube] failed ejs challenge: found 0 sig function possibilities #15816
+[ie/youtube] Default to tv player JS variant #15818
+
+bashonly
+closed this as completedin #15818on Feb 4
+
+bashonly
+pinned this issue on Feb 4
+
+bashonly
+mentioned this on Feb 4
+🚨[IMPORTANT]🚨 KNOWN ISSUES/FAQ #3766
+
+wingwkyuen
+added a commit that references this issue on Feb 4
+[ie/youtube] Default to `tv` player JS variant (yt-dlp#15818)
+
+Verified
+1a895c1
+bashonly
+bashonly commented on Feb 4
+bashonly
+on Feb 4·Pinned by
+bashonly
+Member
+This is now "fixed" in version 2026.02.04. Update!
+Player 4e51e895 broke ejs 0.4.0 with these variants:
+
+main / es5
+tce
+tcc
+These variants of 4e51e895 do not cause any breakage:
+
+es6
+tv
+tv-es6
+phone
+yt-dlp version 2026.02.04 (via 1a895c1) works around this issue by forcing the tv player JS variant.
+
+Support for the broken variants of the latest player versions still needs to be properly added in ejs.
+
+
+bashonly
+marked YouTube n challenge solving failed / No video formats found with player_ias 4e51e895 #15828 as a duplicate of this issue on Feb 5
+pkdev08
+pkdev08 commented on Feb 5
+pkdev08
+on Feb 5 · Hidden as off-topic
+
+guillevc
+mentioned this on Feb 5
+Downloads failing with "Requested format is not available" due to YouTube signature solving changes guillevc/yubal#50
+
+mcdp-adk
+added a commit that references this issue on Feb 5
+fix(download): 修复 YouTube n challenge 解析失败问题
+
+8179fb4
+
+bashonly
+changed the title [-][youtube] Error running deno process (returncode: 1): error: Uncaught (in promise) "found 0 sig function possibilities"[/-] [+][youtube] Error solving n challenge request: Uncaught (in promise) "found 0 sig function possibilities"[/+] on Feb 5
+
+bashonly
+changed the title [-][youtube] Error solving n challenge request: Uncaught (in promise) "found 0 sig function possibilities"[/-] [+][youtube] Error solving n challenge request: "found 0 sig function possibilities"[/+] on Feb 5
+
+bashonly
+changed the title [-][youtube] Error solving n challenge request: "found 0 sig function possibilities"[/-] [+][youtube] `4e51e895`: Error solving n challenge request: "found 0 sig function possibilities"[/+] on Feb 5
+ruben1PvP
+ruben1PvP commented on Feb 5
+ruben1PvP
+on Feb 5 · Hidden as resolved
+error-reporting
+error-reporting commented on Feb 6
+error-reporting
+on Feb 6 · Hidden as outdated
+bashonly
+bashonly commented on Feb 6
+bashonly
+on Feb 6
+Member
+@error-reporting No. Do NOT use this. Do NOT recommend this. It's not necessary with the latest update. It is a measure of last resort ONLY. And if people add that to their config file, then their YouTube downloads will completely break in ~2 weeks.
+
+
+yt-dlp
+locked as resolved and limited conversation to collaborators on Feb 6
+
+bashonly
+marked Hello #15870 as a duplicate of this issue on Feb 8
+
+bashonly
+marked Error solving 2 challenge requests using "deno" provider #15897 as a duplicate of this issue on Feb 9
+
+coletdjnz
+unpinned this issue on Mar 3
+SimpleRoger
+Add a comment
+This conversation has been locked and limited to collaborators.
+Remember, contributions to this repository should follow its contributing guidelines.
+Metadata
+Assignees
+No one assigned
+Labels
+high-priority
+site-bug
+Issue with a specific website
+site:youtube
+Type
+No type
+Projects
+No projects
+Milestone
+No milestone
+Relationships
+None yet
+Development
+[ie/youtube] Default to `tv` player JS variant
+yt-dlp/yt-dlp
+Release
+2026.02.04
+NotificationsCustomize
+You're not receiving notifications from this thread.
+
+Participants
+@jirih
+@pkdev08
+@DTrombett
+@ruben1PvP
+@bashonly
+Issue actions
+Footer
+© 2026 GitHub, Inc.
+Footer navigation
+Terms
+Privacy
+Security
+Status
+Community
+Docs
+Contact
+Manage cookies
+Do not share my personal information
