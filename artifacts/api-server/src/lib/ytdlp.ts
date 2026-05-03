@@ -181,7 +181,7 @@ function pickProxy(): string | null {
 
 export function serverArgs(): string[] {
   const args: string[] = [
-    "--extractor-args", "youtube:player_js_variant=tv",
+    "--extractor-args", "youtube:player_client=ios,mweb,tv",
     "--impersonate", "chrome",
   ];
 

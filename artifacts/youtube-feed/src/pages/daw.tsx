@@ -188,6 +188,8 @@ export default function DawPage() {
   const [detectingBpm, setDetectingBpm] = useState(false);
   const [bpmStatus, setBpmStatus]       = useState<"idle"|"ok"|"err">("idle");
   const [bpmErrMsg, setBpmErrMsg]       = useState("");
+  const tapTimesRef                      = useRef<number[]>([]);
+  const tapResetRef                      = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const ytRef      = useRef<any>(null);
   const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -696,6 +698,28 @@ export default function DawPage() {
     setDetectingBpm(false);
   }
 
+  // ── Tap BPM ──────────────────────────────────────────────────────────────────
+  function tapBpm() {
+    const now = performance.now();
+    if (tapResetRef.current) clearTimeout(tapResetRef.current);
+    tapResetRef.current = setTimeout(() => { tapTimesRef.current = []; }, 3000);
+
+    tapTimesRef.current.push(now);
+    const taps = tapTimesRef.current;
+    if (taps.length >= 2) {
+      const intervals = taps.slice(1).map((t, i) => t - taps[i]);
+      const avgMs = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+      const detected = Math.round(60000 / avgMs);
+      if (detected >= 40 && detected <= 280) {
+        setBpm(detected);
+        setBpmStatus("ok");
+        if (tapTimesRef.current.length >= 2) {
+          setTimeout(() => setBpmStatus("idle"), 2000);
+        }
+      }
+    }
+  }
+
   // ── Projects panel ───────────────────────────────────────────────────────────
   async function fetchProjects() {
     setProjectsLoading(true);
@@ -966,10 +990,17 @@ export default function DawPage() {
                 {bpmStatus === "ok" ? "✓ BPM" : bpmStatus === "err" ? "blocked" : "BPM"}
               </span>
               <button
+                onClick={tapBpm}
+                title="Tap to the beat to set BPM"
+                className="ml-1.5 px-1.5 py-0.5 text-[9px] font-bold text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors select-none"
+              >
+                TAP
+              </button>
+              <button
                 onClick={detectBeatBpm}
                 disabled={!beat}
                 title="Auto-detect BPM from beat audio (~30s)"
-                className="ml-1.5 text-violet-400 hover:text-violet-300 disabled:opacity-40 transition-colors"
+                className="text-violet-400 hover:text-violet-300 disabled:opacity-40 transition-colors"
               >
                 <Wand2 className="w-3 h-3" />
               </button>
