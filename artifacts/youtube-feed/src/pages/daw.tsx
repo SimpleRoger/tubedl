@@ -839,15 +839,15 @@ export default function DawPage() {
         <Mic className="w-12 h-12 text-gray-600" />
         <p className="text-gray-400 text-sm">No beat loaded.</p>
         <p className="text-gray-600 text-xs">Go to Beats, open a beat, then click "Open DAW".</p>
-        <div className="flex gap-3 mt-2">
+        <div className="flex items-center gap-3 mt-2">
           <Link href="/beats">
-            <span className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-sm cursor-pointer transition-colors">
+            <span className="inline-flex items-center px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-sm cursor-pointer transition-colors">
               Browse Beats
             </span>
           </Link>
           <button
             onClick={openProjects}
-            className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl text-sm transition-colors flex items-center gap-2"
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl text-sm transition-colors"
           >
             <FolderOpen className="w-4 h-4" /> Open Saved Project
           </button>
