@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import {
   Play, Square, Circle, Volume2, ArrowLeft,
@@ -9,14 +9,12 @@ import type { Video } from "@workspace/api-client-react";
 const BEAT_KEY = "tubefeed-daw-beat";
 const LANE_COLORS = ["#ef4444", "#22c55e", "#8b5cf6"];
 const LANE_NAMES  = ["Vocal 1", "Vocal 2", "Vocal 3"];
-const TIMELINE_SECS = 300; // total canvas length (5 min)
+const TIMELINE_SECS = 300;
 
-// ── YouTube IFrame API bootstrap ──────────────────────────────────────────────
-let _ytLoaded = false;
-let _ytReady  = false;
+// ── YouTube IFrame API ────────────────────────────────────────────────────────
+let _ytLoaded = false, _ytReady = false;
 const _ytCbs: (() => void)[] = [];
 function loadYT(cb: () => void) {
-  // Already available (e.g. loaded by the beat player before navigating here)
   if ((window as any).YT?.Player) { cb(); return; }
   if (_ytReady) { cb(); return; }
   _ytCbs.push(cb);
@@ -26,34 +24,26 @@ function loadYT(cb: () => void) {
   (window as any).onYouTubeIframeAPIReady = () => {
     _ytReady = true;
     if (typeof prev === "function") prev();
-    _ytCbs.forEach((f) => f());
-    _ytCbs.length = 0;
+    _ytCbs.forEach((f) => f()); _ytCbs.length = 0;
   };
-  // If the script tag already exists in the DOM (from another component), just wait
   if (document.querySelector('script[src*="youtube.com/iframe_api"]')) return;
   const s = document.createElement("script");
   s.src = "https://www.youtube.com/iframe_api";
   document.head.appendChild(s);
 }
 
+// ── Utils ─────────────────────────────────────────────────────────────────────
 function fmtTime(sec: number) {
-  const m   = Math.floor(sec / 60);
-  const s   = Math.floor(sec % 60);
-  const dec = Math.floor((sec % 1) * 10);
-  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${dec}`;
+  const m = Math.floor(sec / 60), s = Math.floor(sec % 60), d = Math.floor((sec % 1) * 10);
+  return `${m.toString().padStart(2,"0")}:${s.toString().padStart(2,"0")}.${d}`;
 }
-
 function fmtRuler(sec: number) {
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return m > 0 ? `${m}:${s.toString().padStart(2, "0")}` : `${s}s`;
+  const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+  return m > 0 ? `${m}:${s.toString().padStart(2,"0")}` : `${s}s`;
 }
-
-/** Pick a ruler tick interval (seconds) so ticks are ~60-100px apart */
 function rulerInterval(zoom: number) {
-  const nice = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
-  const target = 70 / zoom;
-  return nice.find((v) => v >= target) ?? 300;
+  const nice = [0.5,1,2,5,10,15,30,60,120,300];
+  return nice.find((v) => v >= 70 / zoom) ?? 300;
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -62,22 +52,20 @@ type Lane = {
   muted: boolean; volume: number;
   blobUrl: string | null; mime: string;
   waveform: number[]; durationSec: number;
+  startOffset: number;   // seconds from timeline start
 };
 function makeLanes(): Lane[] {
   return LANE_NAMES.map((name, i) => ({
     id: i, name, color: LANE_COLORS[i],
     muted: false, volume: 80,
     blobUrl: null, mime: "audio/webm",
-    waveform: [], durationSec: 0,
+    waveform: [], durationSec: 0, startOffset: 0,
   }));
 }
 
 // ── Waveform canvas ───────────────────────────────────────────────────────────
-function WaveCanvas({ data, color, zoom, durationSec }: {
-  data: number[]; color: string; zoom: number; durationSec: number;
-}) {
+function WaveCanvas({ data, color, widthPx }: { data: number[]; color: string; widthPx: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const width = Math.max(durationSec * zoom, 80);
   useEffect(() => {
     const c = ref.current;
     if (!c || data.length === 0) return;
@@ -86,28 +74,20 @@ function WaveCanvas({ data, color, zoom, durationSec }: {
     const W = c.width, H = c.height, mid = H / 2;
     ctx.clearRect(0, 0, W, H);
     const bw = W / data.length;
-    ctx.fillStyle = color;
-    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = color; ctx.globalAlpha = 0.85;
     data.forEach((v, i) => {
       const h = Math.max(2, v * mid * 1.8);
       ctx.fillRect(i * bw, mid - h / 2, Math.max(1, bw - 0.5), h);
     });
-  }, [data, color, width]);
-  return (
-    <canvas
-      ref={ref}
-      width={Math.round(width)}
-      height={56}
-      className="h-full"
-      style={{ width }}
-    />
-  );
+  }, [data, color, widthPx]);
+  return <canvas ref={ref} width={Math.max(1, Math.round(widthPx))} height={56} style={{ width: widthPx, height: "100%" }} />;
 }
 
-// Static decorative beat bars
 const BEAT_BARS = Array.from({ length: 200 }, (_, i) =>
   30 + Math.abs(Math.sin(i * 0.37) * 52 + Math.sin(i * 0.13 + 1) * 28)
 );
+
+const TRACK_H = 76, RULER_H = 24, LEFT_W = 208;
 
 // ── Main DAW page ─────────────────────────────────────────────────────────────
 export default function DawPage() {
@@ -120,7 +100,7 @@ export default function DawPage() {
   const [ytReady, setYtReady]         = useState(false);
   const [micError, setMicError]       = useState(false);
   const [beatMuted, setBeatMuted]     = useState(false);
-  const [zoom, setZoom]               = useState(50); // px per second
+  const [zoom, setZoom]               = useState(50);
 
   const ytRef      = useRef<any>(null);
   const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -129,9 +109,16 @@ export default function DawPage() {
   const mrRef      = useRef<MediaRecorder | null>(null);
   const chunksRef  = useRef<Blob[]>([]);
   const recLaneRef = useRef(-1);
-  const recIdRef   = useRef(0); // bumped on every stopAll so stale onstop can't corrupt state
   const audioEls   = useRef<(HTMLAudioElement | null)[]>([null, null, null]);
-  const tlRef      = useRef<HTMLDivElement>(null); // scrollable timeline
+  const tlRef      = useRef<HTMLDivElement>(null);
+  const zoomRef    = useRef(50);       // stable zoom for event handlers
+  const lanesRef   = useRef(lanes);    // stable lanes ref
+  const schedules  = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const dragRef    = useRef<{ laneId: number; startX: number; origOffset: number } | null>(null);
+
+  // keep refs in sync
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  useEffect(() => { lanesRef.current = lanes; }, [lanes]);
 
   // ── Load beat ──
   useEffect(() => {
@@ -159,25 +146,40 @@ export default function DawPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [beat?.videoId]);
 
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      try { ytRef.current?.destroy?.(); } catch (_) {}
-    };
+  useEffect(() => () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    schedules.current.forEach(clearTimeout);
+    try { ytRef.current?.destroy?.(); } catch (_) {}
   }, []);
 
-  // ── Auto-scroll playhead into view ──
+  // ── Auto-scroll playhead ──
   useEffect(() => {
     const el = tlRef.current;
     if (!el || !isPlaying) return;
     const px = timeRef.current * zoom;
-    const { scrollLeft, clientWidth } = el;
-    if (px > scrollLeft + clientWidth - 60) {
-      el.scrollLeft = px - clientWidth / 3;
-    }
+    if (px > el.scrollLeft + el.clientWidth - 60) el.scrollLeft = px - el.clientWidth / 3;
   }, [time, zoom, isPlaying]);
 
-  // ── Helpers ──
+  // ── Drag handlers (global, stable via ref) ──
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      const d = dragRef.current;
+      if (!d) return;
+      const dx = e.clientX - d.startX;
+      const newOffset = Math.max(0, d.origOffset + dx / zoomRef.current);
+      setLanes((p) => p.map((l) => l.id === d.laneId ? { ...l, startOffset: newOffset } : l));
+    }
+    function onUp() { dragRef.current = null; }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
+  }, []);
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  function clearSchedules() {
+    schedules.current.forEach(clearTimeout);
+    schedules.current = [];
+  }
   function stopClock() {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   }
@@ -189,23 +191,47 @@ export default function DawPage() {
       setTime(t); timeRef.current = t;
     }, 16);
   }
+
+  // stopAll owns isRecording — onstop never touches it (avoids async race)
   function stopAll() {
-    recIdRef.current++;          // invalidate any in-flight onstop callbacks
+    clearSchedules();
     stopClock();
     try { ytRef.current?.stopVideo?.(); } catch (_) {}
     audioEls.current.forEach((a) => { if (a) { a.pause(); a.currentTime = 0; } });
-    if (mrRef.current?.state === "recording") mrRef.current.stop();
+    if (mrRef.current?.state === "recording") {
+      try { mrRef.current.stop(); } catch (_) {}
+    }
+    mrRef.current = null;
     setIsPlaying(false); setIsRecording(false);
     setTime(0); timeRef.current = 0;
   }
 
+  function scheduleLanes(t: number, ls: Lane[]) {
+    clearSchedules();
+    ls.forEach((lane, i) => {
+      const a = audioEls.current[i];
+      if (!a || !lane.blobUrl || lane.muted) return;
+      a.volume = lane.volume / 100;
+      const delayMs = Math.max(0, (lane.startOffset - t) * 1000);
+      const audioPos = Math.max(0, t - lane.startOffset);
+      if (t < lane.startOffset) {
+        // Clip starts later — schedule it
+        a.pause();
+        const tid = setTimeout(() => { a.currentTime = 0; a.play().catch(() => {}); }, delayMs);
+        schedules.current.push(tid);
+      } else {
+        a.currentTime = Math.min(audioPos, a.duration || 0);
+        a.play().catch(() => {});
+      }
+    });
+  }
+
   async function decodeWaveform(blob: Blob, laneId: number) {
     try {
-      const ac  = new AudioContext();
+      const ac = new AudioContext();
       const buf = await ac.decodeAudioData(await blob.arrayBuffer());
       const raw = buf.getChannelData(0);
-      const N   = 300;
-      const blk = Math.floor(raw.length / N);
+      const N = 300, blk = Math.floor(raw.length / N);
       const wf: number[] = [];
       for (let i = 0; i < N; i++) {
         let s = 0;
@@ -213,65 +239,39 @@ export default function DawPage() {
         wf.push(Math.min(1, (s / blk) * 6));
       }
       await ac.close();
-      setLanes((p) => p.map((l) => l.id === laneId
-        ? { ...l, waveform: wf, durationSec: buf.duration }
-        : l
-      ));
+      setLanes((p) => p.map((l) => l.id === laneId ? { ...l, waveform: wf, durationSec: buf.duration } : l));
     } catch { /* ignore */ }
   }
 
-  // ── Seek ──
-  const seekTo = useCallback((sec: number) => {
-    const t = Math.max(0, Math.min(sec, TIMELINE_SECS));
-    setTime(t); timeRef.current = t;
-    if (isPlaying) {
-      try { ytRef.current?.seekTo?.(t, true); } catch (_) {}
-      audioEls.current.forEach((a, i) => {
-        if (a && lanes[i]?.blobUrl && !lanes[i]?.muted) {
-          a.currentTime = Math.min(t, a.duration || 0);
-        }
-      });
-      // Update clock base
-      baseRef.current = Date.now() - t * 1000;
-    }
-  }, [isPlaying, lanes]);
-
-  // ── Timeline click to seek ──
-  function handleTimelineClick(e: React.MouseEvent<HTMLDivElement>) {
-    if (isRecording) return;
-    const el = tlRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const x = e.clientX - rect.left + el.scrollLeft;
-    seekTo(x / zoom);
-  }
-
-  // ── Transport ──
+  // ── Transport ─────────────────────────────────────────────────────────────────
   async function handleRecord() {
     if (armedLane < 0 || !ytReady) return;
-    stopAll();                        // bumps recIdRef, sets isRecording false
+    stopAll();
     setMicError(false);
-    const myId = ++recIdRef.current;  // stamp for THIS recording session
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mime   = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus" : "audio/webm";
-      const mr = new MediaRecorder(stream, { mimeType: mime });
+      const mime   = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+      const mr     = new MediaRecorder(stream, { mimeType: mime });
       mrRef.current = mr; chunksRef.current = []; recLaneRef.current = armedLane;
+
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = async () => {
-        // Always save the audio — but only clear recording state if no newer
-        // recording/stopAll has superseded us (prevents the stuck-REC bug)
+        // stopAll() is the sole owner of isRecording state — never touch it here.
+        // Always save the blob regardless of who triggered stop.
         const blob = new Blob(chunksRef.current, { type: mime });
         const url  = URL.createObjectURL(blob);
         const lid  = recLaneRef.current;
-        setLanes((p) => p.map((l) => l.id === lid ? { ...l, blobUrl: url, mime } : l));
+        setLanes((p) => p.map((l) => l.id === lid
+          ? { ...l, blobUrl: url, mime, startOffset: 0 }
+          : l
+        ));
         stream.getTracks().forEach((t) => t.stop());
-        if (recIdRef.current === myId) setIsRecording(false);
         decodeWaveform(blob, lid);
       };
+
       mr.start(100);
       ytRef.current.seekTo(0, true); ytRef.current.playVideo();
+      if (beatMuted) ytRef.current.mute();
       startClock(0);
       setIsRecording(true); setIsPlaying(true);
     } catch { setMicError(true); }
@@ -281,38 +281,41 @@ export default function DawPage() {
     if (isPlaying) return;
     const t = timeRef.current;
     try { ytRef.current?.seekTo?.(t, true); ytRef.current?.playVideo?.(); } catch (_) {}
-    lanes.forEach((lane, i) => {
-      const a = audioEls.current[i];
-      if (a && lane.blobUrl && !lane.muted) {
-        a.volume = lane.volume / 100;
-        a.currentTime = Math.min(t, a.duration || 0);
-        a.play().catch(() => {});
-      }
-    });
-    startClock(t);
-    setIsPlaying(true);
+    scheduleLanes(t, lanesRef.current);
+    startClock(t); setIsPlaying(true);
   }
 
   function handlePause() {
-    stopClock();
+    clearSchedules(); stopClock();
     try { ytRef.current?.pauseVideo?.(); } catch (_) {}
     audioEls.current.forEach((a) => { if (a) a.pause(); });
     setIsPlaying(false);
   }
 
-  // ── Zoom ──
-  const changeZoom = (delta: number) => {
-    setZoom((z) => Math.max(8, Math.min(400, z * delta)));
-  };
+  function seekTo(sec: number) {
+    const t = Math.max(0, Math.min(sec, TIMELINE_SECS));
+    setTime(t); timeRef.current = t;
+    if (isPlaying) {
+      try { ytRef.current?.seekTo?.(t, true); } catch (_) {}
+      scheduleLanes(t, lanesRef.current);
+      baseRef.current = Date.now() - t * 1000;
+    }
+  }
 
-  // ── Ruler ticks ──
-  const interval  = rulerInterval(zoom);
-  const tickCount = Math.ceil(TIMELINE_SECS / interval) + 1;
-  const ticks     = Array.from({ length: tickCount }, (_, i) => i * interval);
+  function handleTimelineClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (isRecording) return;
+    const el = tlRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    seekTo((e.clientX - rect.left + el.scrollLeft) / zoom);
+  }
+
+  // ── Ruler ────────────────────────────────────────────────────────────────────
+  const interval   = rulerInterval(zoom);
+  const tickCount  = Math.ceil(TIMELINE_SECS / interval) + 1;
+  const ticks      = Array.from({ length: tickCount }, (_, i) => i * interval);
   const totalWidth = TIMELINE_SECS * zoom;
-  const TRACK_H   = 76;
-  const RULER_H   = 24;
-  const LEFT_W    = 208; // px, matches w-52
+  const playheadPx = time * zoom;
 
   if (!beat) {
     return (
@@ -329,8 +332,6 @@ export default function DawPage() {
     );
   }
 
-  const playheadPx = time * zoom;
-
   return (
     <div className="h-screen bg-[#0e0e0e] flex flex-col font-sans text-white select-none overflow-hidden">
 
@@ -343,7 +344,6 @@ export default function DawPage() {
         </Link>
         <div className="w-px h-5 bg-[#333]" />
 
-        {/* Transport controls */}
         <div className="flex items-center gap-1">
           <button onClick={stopAll} title="Stop / Rewind" className="p-2 rounded-lg hover:bg-white/10 transition-colors">
             <SkipBack className="w-4 h-4 text-gray-400" />
@@ -372,33 +372,20 @@ export default function DawPage() {
           </button>
         </div>
 
-        {/* Time */}
         <div className="font-mono text-lg text-white tabular-nums bg-black/40 px-3 py-1 rounded-lg border border-[#2a2a2a] min-w-[90px] text-center">
           {fmtTime(time)}
         </div>
 
-        {/* Zoom controls */}
-        <div className="flex items-center gap-1 ml-1">
-          <button
-            onClick={() => changeZoom(0.6)}
-            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-            title="Zoom out"
-          >
+        <div className="flex items-center gap-1">
+          <button onClick={() => setZoom((z) => Math.max(8, z * 0.6))} className="p-2 rounded-lg hover:bg-white/10 transition-colors" title="Zoom out">
             <ZoomOut className="w-4 h-4 text-gray-400" />
           </button>
-          <span className="text-[10px] text-gray-600 w-10 text-center tabular-nums">
-            {zoom < 20 ? `${zoom.toFixed(0)}` : zoom < 100 ? `${zoom.toFixed(0)}` : `${zoom.toFixed(0)}`}px/s
-          </span>
-          <button
-            onClick={() => changeZoom(1.667)}
-            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-            title="Zoom in"
-          >
+          <span className="text-[10px] text-gray-600 w-12 text-center tabular-nums">{Math.round(zoom)}px/s</span>
+          <button onClick={() => setZoom((z) => Math.min(400, z * 1.667))} className="p-2 rounded-lg hover:bg-white/10 transition-colors" title="Zoom in">
             <ZoomIn className="w-4 h-4 text-gray-400" />
           </button>
         </div>
 
-        {/* Beat info */}
         <div className="flex items-center gap-2 ml-1 min-w-0 flex-1">
           <img src={beat.thumbnailUrl} className="w-8 h-8 rounded object-cover shrink-0 border border-[#333]" alt="" />
           <div className="min-w-0">
@@ -407,15 +394,12 @@ export default function DawPage() {
           </div>
         </div>
 
-        {/* Status */}
         <div className="shrink-0 flex items-center gap-2 text-xs">
           {!ytReady && <span className="flex items-center gap-1 text-gray-500"><Loader2 className="w-3 h-3 animate-spin" />Loading…</span>}
           {micError && <span className="text-red-400">Mic access denied</span>}
           {isRecording && <span className="flex items-center gap-1.5 text-red-400 font-bold animate-pulse"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" />REC</span>}
           {armedLane >= 0 && !isRecording && (
-            <span className="text-[11px] px-2 py-0.5 rounded-full border border-red-600/40 text-red-400/80">
-              {LANE_NAMES[armedLane]} armed
-            </span>
+            <span className="text-[11px] px-2 py-0.5 rounded-full border border-red-600/40 text-red-400/80">{LANE_NAMES[armedLane]} armed</span>
           )}
         </div>
       </div>
@@ -423,10 +407,8 @@ export default function DawPage() {
       {/* ── Main track area ── */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* Left: stacked track panels */}
+        {/* Left panels */}
         <div className="shrink-0 flex flex-col border-r border-[#2a2a2a] bg-[#161616]" style={{ width: LEFT_W }}>
-
-          {/* Ruler spacer */}
           <div className="shrink-0 border-b border-[#2a2a2a] flex items-center px-3" style={{ height: RULER_H }}>
             <span className="text-[9px] text-gray-600 font-bold uppercase tracking-widest">Track</span>
           </div>
@@ -440,12 +422,8 @@ export default function DawPage() {
             </div>
             <button
               onClick={() => {
-                const next = !beatMuted;
-                setBeatMuted(next);
-                try {
-                  if (next) ytRef.current?.mute?.();
-                  else ytRef.current?.unMute?.();
-                } catch (_) {}
+                const next = !beatMuted; setBeatMuted(next);
+                try { next ? ytRef.current?.mute?.() : ytRef.current?.unMute?.(); } catch (_) {}
               }}
               className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold transition-all shrink-0 border"
               style={beatMuted
@@ -463,23 +441,15 @@ export default function DawPage() {
               className="shrink-0 flex items-center gap-2 px-3 bg-[#181818] border-b border-[#222] transition-colors"
               style={{ height: TRACK_H, backgroundColor: armedLane === lane.id ? `${lane.color}0a` : undefined }}
             >
-              {/* Arm */}
               <button
                 onClick={() => setArmedLane((p) => p === lane.id ? -1 : lane.id)}
                 className="w-7 h-7 rounded-lg flex items-center justify-center transition-all shrink-0 border"
-                style={armedLane === lane.id
-                  ? { backgroundColor: "#dc2626", borderColor: "#ef4444" }
-                  : { borderColor: "#2a2a2a", color: "#666" }
-                }
-                title="Arm for recording"
+                style={armedLane === lane.id ? { backgroundColor: "#dc2626", borderColor: "#ef4444" } : { borderColor: "#2a2a2a", color: "#666" }}
               >
                 <Circle className="w-3 h-3" style={{ color: armedLane === lane.id ? "white" : "#666" }} fill={armedLane === lane.id ? "white" : "none"} />
               </button>
-
               <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-bold truncate mb-1" style={{ color: lane.blobUrl ? lane.color : "#ccc" }}>
-                  {lane.name}
-                </p>
+                <p className="text-[11px] font-bold truncate mb-1" style={{ color: lane.blobUrl ? lane.color : "#ccc" }}>{lane.name}</p>
                 <div className="flex items-center gap-1">
                   <Volume2 className="w-2.5 h-2.5 text-gray-700 shrink-0" />
                   <input
@@ -487,17 +457,13 @@ export default function DawPage() {
                     onChange={(e) => {
                       const v = Number(e.target.value);
                       setLanes((p) => p.map((l) => l.id === lane.id ? { ...l, volume: v } : l));
-                      const a = audioEls.current[lane.id];
-                      if (a) a.volume = v / 100;
+                      const a = audioEls.current[lane.id]; if (a) a.volume = v / 100;
                     }}
-                    className="flex-1 h-1 cursor-pointer min-w-0"
-                    style={{ accentColor: lane.color }}
+                    className="flex-1 h-1 cursor-pointer min-w-0" style={{ accentColor: lane.color }}
                   />
                   <span className="text-[9px] text-gray-600 w-6 text-right shrink-0">{lane.volume}</span>
                 </div>
               </div>
-
-              {/* Mute */}
               <button
                 onClick={() => setLanes((p) => p.map((l) => l.id === lane.id ? { ...l, muted: !l.muted } : l))}
                 className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold transition-all shrink-0 border"
@@ -505,13 +471,12 @@ export default function DawPage() {
                   ? { backgroundColor: "rgba(234,179,8,0.15)", borderColor: "rgba(234,179,8,0.4)", color: "#eab308" }
                   : { borderColor: "#2a2a2a", color: "#555" }
                 }
-                title={lane.muted ? "Unmute" : "Mute"}
               >M</button>
             </div>
           ))}
         </div>
 
-        {/* Right: scrollable timeline */}
+        {/* Scrollable timeline */}
         <div
           ref={tlRef}
           className="flex-1 overflow-x-auto overflow-y-hidden relative"
@@ -519,56 +484,46 @@ export default function DawPage() {
         >
           <div style={{ width: totalWidth, position: "relative", minHeight: "100%" }}>
 
-            {/* ── Ruler ── */}
+            {/* Ruler */}
             <div
               className="sticky top-0 z-20 bg-[#161616] border-b border-[#2a2a2a] overflow-hidden"
               style={{ height: RULER_H }}
               onClick={handleTimelineClick}
             >
-              {ticks.map((sec) => {
-                const x = sec * zoom;
-                return (
-                  <div key={sec} className="absolute top-0 flex flex-col items-start" style={{ left: x }}>
-                    <div className="w-px bg-[#3a3a3a]" style={{ height: RULER_H }} />
-                    <span className="text-[9px] text-gray-500 ml-1 absolute top-1" style={{ left: 2 }}>
-                      {fmtRuler(sec)}
-                    </span>
-                  </div>
-                );
-              })}
-              {/* Sub-ticks */}
+              {ticks.map((sec) => (
+                <div key={sec} className="absolute top-0" style={{ left: sec * zoom }}>
+                  <div className="w-px bg-[#3a3a3a]" style={{ height: RULER_H }} />
+                  <span className="text-[9px] text-gray-500 absolute top-1" style={{ left: 2 }}>
+                    {fmtRuler(sec)}
+                  </span>
+                </div>
+              ))}
               {interval >= 2 && ticks.flatMap((sec) =>
-                Array.from({ length: 4 }, (_, j) => sec + interval * (j + 1) / 5).filter((s) => s < TIMELINE_SECS).map((s) => (
-                  <div key={`sub-${s}`} className="absolute bottom-0 w-px bg-[#2a2a2a]" style={{ left: s * zoom, height: 6 }} />
-                ))
+                Array.from({ length: 4 }, (_, j) => sec + interval * (j + 1) / 5)
+                  .filter((s) => s < TIMELINE_SECS)
+                  .map((s) => (
+                    <div key={`sub-${s}`} className="absolute bottom-0 w-px bg-[#2a2a2a]" style={{ left: s * zoom, height: 6 }} />
+                  ))
               )}
             </div>
 
-            {/* ── Click-to-seek overlay (spans all track rows) ── */}
+            {/* Click-to-seek overlay */}
             <div
               className="absolute z-10"
               style={{ top: RULER_H, left: 0, right: 0, bottom: 0 }}
               onClick={handleTimelineClick}
             />
 
-            {/* ── Beat clip row ── */}
-            <div
-              className="relative border-b border-[#2a2a2a] overflow-hidden"
-              style={{ height: TRACK_H, backgroundColor: "rgba(127,29,29,0.2)" }}
-            >
+            {/* Beat clip row */}
+            <div className="relative border-b border-[#2a2a2a] overflow-hidden" style={{ height: TRACK_H, backgroundColor: "rgba(127,29,29,0.2)" }}>
               <div id="daw-yt-player" className="hidden absolute" />
               <div className="absolute inset-0 flex items-center px-2">
                 <div className="flex w-full items-center gap-[1px]" style={{ height: 52 }}>
                   {BEAT_BARS.map((h, i) => (
-                    <div
-                      key={i}
-                      className="flex-1 rounded-[1px]"
-                      style={{
-                        height: `${h}%`,
-                        backgroundColor: `rgba(239,68,68,${isPlaying ? 0.45 + Math.sin(i * 0.5 + time * 6) * 0.08 : 0.4})`,
-                        minWidth: 1,
-                      }}
-                    />
+                    <div key={i} className="flex-1 rounded-[1px]" style={{
+                      height: `${h}%`, minWidth: 1,
+                      backgroundColor: `rgba(239,68,68,${isPlaying ? 0.45 + Math.sin(i * 0.5 + time * 6) * 0.08 : 0.4})`,
+                    }} />
                   ))}
                 </div>
               </div>
@@ -578,94 +533,84 @@ export default function DawPage() {
               </div>
             </div>
 
-            {/* ── Recording lane clip rows ── */}
-            {lanes.map((lane, i) => (
-              <div
-                key={lane.id}
-                className="relative border-b border-[#1e1e1e] overflow-hidden"
-                style={{
-                  height: TRACK_H,
-                  backgroundColor: armedLane === lane.id ? `${lane.color}06` : "#141414",
-                }}
-              >
-                {lane.blobUrl ? (
-                  <>
-                    <div
-                      className="absolute flex items-center overflow-hidden"
-                      style={{
-                        top: 8, bottom: 8, left: 8,
-                        width: lane.durationSec > 0 ? lane.durationSec * zoom - 16 : "calc(100% - 16px)",
-                        backgroundColor: `${lane.color}12`,
-                        border: `1px solid ${lane.color}35`,
-                        borderRadius: 8,
-                        padding: "0 8px",
-                      }}
-                    >
-                      <WaveCanvas data={lane.waveform} color={lane.color} zoom={zoom} durationSec={lane.durationSec} />
+            {/* Lane clip rows */}
+            {lanes.map((lane, i) => {
+              const clipW = lane.durationSec > 0 ? lane.durationSec * zoom : 120;
+              const clipLeft = lane.startOffset * zoom;
+              return (
+                <div
+                  key={lane.id}
+                  className="relative border-b border-[#1e1e1e]"
+                  style={{ height: TRACK_H, backgroundColor: armedLane === lane.id ? `${lane.color}06` : "#141414" }}
+                >
+                  {lane.blobUrl ? (
+                    <>
+                      {/* Draggable clip */}
+                      <div
+                        className="absolute z-20"
+                        style={{ top: 8, bottom: 8, left: clipLeft, width: clipW }}
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          dragRef.current = { laneId: lane.id, startX: e.clientX, origOffset: lane.startOffset };
+                        }}
+                      >
+                        <div
+                          className="w-full h-full rounded-lg overflow-hidden flex items-center px-2"
+                          style={{
+                            backgroundColor: `${lane.color}14`,
+                            border: `1px solid ${lane.color}40`,
+                            cursor: dragRef.current?.laneId === lane.id ? "grabbing" : "grab",
+                          }}
+                        >
+                          <WaveCanvas data={lane.waveform} color={lane.color} widthPx={Math.max(1, clipW - 16)} />
+                        </div>
+                        <div className="absolute top-1.5 left-2.5 flex items-center gap-1 z-10">
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ color: lane.color, backgroundColor: `${lane.color}25` }}>
+                            {lane.name}
+                          </span>
+                          {lane.durationSec > 0 && <span className="text-[10px] text-gray-600">{lane.durationSec.toFixed(1)}s</span>}
+                        </div>
+                      </div>
+                      <audio ref={(el) => { audioEls.current[i] = el; }} src={lane.blobUrl} preload="auto" />
+                    </>
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      {armedLane === lane.id ? (
+                        <p className="text-xs font-semibold" style={{ color: lane.color }}>
+                          {isRecording ? "● Recording…" : "Armed — press ● Record"}
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-gray-800">Click ● on left to arm</p>
+                      )}
                     </div>
-                    <div className="absolute top-2.5 left-4 z-10 flex items-center gap-1.5">
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ color: lane.color, backgroundColor: `${lane.color}20` }}>
-                        {lane.name}
-                      </span>
-                      {lane.durationSec > 0 && <span className="text-[10px] text-gray-600">{lane.durationSec.toFixed(1)}s</span>}
-                    </div>
-                    <audio ref={(el) => { audioEls.current[i] = el; }} src={lane.blobUrl} preload="auto" />
-                  </>
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    {armedLane === lane.id ? (
-                      <p className="text-xs font-semibold" style={{ color: lane.color }}>
-                        {isRecording ? "● Recording…" : "Armed — press ● Record in transport"}
-                      </p>
-                    ) : (
-                      <p className="text-[11px] text-gray-800">Click ● on left to arm</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
+                  )}
+                </div>
+              );
+            })}
 
-            {/* ── Playhead ── */}
-            <div
-              className="absolute top-0 bottom-0 z-30 pointer-events-none"
-              style={{ left: playheadPx, width: 2 }}
-            >
-              {/* Line */}
+            {/* Playhead */}
+            <div className="absolute top-0 bottom-0 z-30 pointer-events-none" style={{ left: playheadPx, width: 2 }}>
               <div className="absolute inset-0 bg-white/80" style={{ top: RULER_H }} />
-              {/* Triangle handle in ruler */}
-              <div
-                className="absolute"
-                style={{
-                  top: RULER_H - 10,
-                  left: -5,
-                  width: 0, height: 0,
-                  borderLeft: "6px solid transparent",
-                  borderRight: "6px solid transparent",
-                  borderTop: "10px solid rgba(255,255,255,0.9)",
-                }}
-              />
-              {/* Time label */}
-              <div
-                className="absolute text-[9px] font-mono text-white/80 bg-black/60 px-1 rounded"
-                style={{ top: RULER_H - 22, left: 4, whiteSpace: "nowrap" }}
-              >
+              <div className="absolute" style={{
+                top: RULER_H - 10, left: -5,
+                width: 0, height: 0,
+                borderLeft: "6px solid transparent", borderRight: "6px solid transparent",
+                borderTop: "10px solid rgba(255,255,255,0.9)",
+              }} />
+              <div className="absolute text-[9px] font-mono text-white/80 bg-black/60 px-1 rounded" style={{ top: RULER_H - 22, left: 4, whiteSpace: "nowrap" }}>
                 {fmtTime(time)}
               </div>
             </div>
-
           </div>
         </div>
       </div>
 
-      {/* ── Hint bar ── */}
+      {/* Hint bar */}
       <div className="h-7 bg-[#111] border-t border-[#1e1e1e] flex items-center px-4 text-[10px] text-gray-700 gap-4 shrink-0">
-        <span>Click timeline to seek</span>
-        <span className="text-gray-800">·</span>
-        <span>● Arm a lane → ● Record</span>
-        <span className="text-gray-800">·</span>
-        <span>▶ Play mix</span>
-        <span className="text-gray-800">·</span>
-        <span>M mute · scroll to pan</span>
+        <span>Click timeline to seek</span><span className="text-gray-800">·</span>
+        <span>Drag clips to reposition</span><span className="text-gray-800">·</span>
+        <span>● Arm → ● Record</span><span className="text-gray-800">·</span>
+        <span>▶ Play mix · M mute</span>
       </div>
     </div>
   );
