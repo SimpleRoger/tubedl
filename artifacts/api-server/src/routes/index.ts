@@ -12,6 +12,7 @@ import videoDownloadRouter from "./video-download";
 import dawProjectsRouter from "./daw-projects";
 import yogaRouter from "./yoga";
 import detectKeyRouter from "./detect-key";
+import detectBpmRouter from "./detect-bpm";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(videoDownloadRouter);
 router.use(dawProjectsRouter);
 router.use(yogaRouter);
 router.use(detectKeyRouter);
+router.use(detectBpmRouter);
 
 export default router;

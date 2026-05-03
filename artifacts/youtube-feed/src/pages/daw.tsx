@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Link } from "wouter";
 import {
   Play, Square, Circle, Volume2, ArrowLeft,
@@ -42,6 +42,12 @@ function fmtTime(sec: number) {
 function fmtRuler(sec: number) {
   const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
   return m > 0 ? `${m}:${s.toString().padStart(2,"0")}` : `${s}s`;
+}
+function fmtBarBeat(sec: number, secPerBeat: number) {
+  const totalBeats = sec / secPerBeat;
+  const bar  = Math.floor(totalBeats / 4) + 1;
+  const beat = Math.floor(totalBeats % 4) + 1;
+  return `${bar}.${beat}`;
 }
 function rulerInterval(zoom: number) {
   const nice = [0.5,1,2,5,10,15,30,60,120,300];
@@ -178,6 +184,8 @@ export default function DawPage() {
   const [fxLane, setFxLane]           = useState<number | null>(null);
   const [autotuneProcessing, setAutotuneProcessing] = useState<Set<number>>(new Set());
   const [detectingKey, setDetectingKey] = useState(false);
+  const [bpm, setBpm]                   = useState(120);
+  const [detectingBpm, setDetectingBpm] = useState(false);
 
   const ytRef      = useRef<any>(null);
   const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -650,6 +658,19 @@ export default function DawPage() {
     setDetectingKey(false);
   }
 
+  // ── Detect BPM from beat audio ────────────────────────────────────────────────
+  async function detectBeatBpm() {
+    if (!beat?.videoId) return;
+    setDetectingBpm(true);
+    try {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/detect-bpm/${beat.videoId}`);
+      if (!res.ok) throw new Error("detection failed");
+      const { bpm: detected } = await res.json() as { bpm: number };
+      if (detected && detected > 0) setBpm(detected);
+    } catch { /* silent */ }
+    setDetectingBpm(false);
+  }
+
   // ── Projects panel ───────────────────────────────────────────────────────────
   async function fetchProjects() {
     setProjectsLoading(true);
@@ -774,10 +795,27 @@ export default function DawPage() {
     seekTo((e.clientX - rect.left + el.scrollLeft) / zoom);
   }
 
-  // ── Ruler ────────────────────────────────────────────────────────────────────
-  const interval   = rulerInterval(zoom);
-  const tickCount  = Math.ceil(TIMELINE_SECS / interval) + 1;
-  const ticks      = Array.from({ length: tickCount }, (_, i) => i * interval);
+  // ── BPM grid ─────────────────────────────────────────────────────────────────
+  const secPerBeat = 60 / bpm;
+  const beatPx     = secPerBeat * zoom;   // pixels per beat
+
+  const beatTicks = useMemo(() => {
+    const spb = 60 / bpm;
+    const total = Math.ceil(TIMELINE_SECS / spb) + 1;
+    const out: { i: number; sec: number; isBar: boolean; bar: number; beatInBar: number }[] = [];
+    for (let i = 0; i < total; i++) {
+      const sec = i * spb;
+      if (sec > TIMELINE_SECS) break;
+      out.push({ i, sec, isBar: i % 4 === 0, bar: Math.floor(i / 4) + 1, beatInBar: (i % 4) + 1 });
+    }
+    return out;
+  }, [bpm]);
+
+  // Only show beat lines when there's enough room, only show sub-beat at high zoom
+  const showBeatLines  = beatPx >= 10;
+  const showSubBeats   = beatPx >= 44;
+
+  // ── Ruler ─────────────────────────────────────────────────────────────────────
   const totalWidth = TIMELINE_SECS * zoom;
   const playheadPx = time * zoom;
 
@@ -869,6 +907,28 @@ export default function DawPage() {
           <span className="text-[10px] text-gray-600 w-12 text-center tabular-nums">{Math.round(zoom)}px/s</span>
           <button onClick={() => setZoom((z) => Math.min(400, z * 1.667))} className="p-2 rounded-lg hover:bg-white/10 transition-colors">
             <ZoomIn className="w-4 h-4 text-gray-400" />
+          </button>
+        </div>
+
+        {/* BPM */}
+        <div className="flex items-center gap-0.5 bg-black/40 px-2 py-1 rounded-lg border border-[#2a2a2a]">
+          <button
+            onClick={() => setBpm((b) => Math.max(40, b - 1))}
+            className="text-gray-500 hover:text-white w-4 text-center leading-none select-none"
+          >−</button>
+          <span className="text-[11px] font-mono text-white tabular-nums w-8 text-center">{bpm}</span>
+          <button
+            onClick={() => setBpm((b) => Math.min(300, b + 1))}
+            className="text-gray-500 hover:text-white w-4 text-center leading-none select-none"
+          >+</button>
+          <span className="text-[10px] text-gray-600 ml-0.5">BPM</span>
+          <button
+            onClick={detectBeatBpm}
+            disabled={detectingBpm || !beat}
+            title="Auto-detect BPM from beat"
+            className="ml-1.5 text-violet-400 hover:text-violet-300 disabled:opacity-40 transition-colors"
+          >
+            {detectingBpm ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
           </button>
         </div>
 
@@ -1023,24 +1083,59 @@ export default function DawPage() {
         >
           <div style={{ width: totalWidth, position: "relative", minHeight: "100%" }}>
 
-            {/* Ruler */}
+            {/* Ruler — bar/beat grid */}
             <div
               className="sticky top-0 z-20 bg-[#161616] border-b border-[#2a2a2a] overflow-hidden"
               style={{ height: RULER_H }}
               onClick={handleTimelineClick}
             >
-              {ticks.map((sec) => (
-                <div key={sec} className="absolute top-0" style={{ left: sec * zoom }}>
-                  <div className="w-px bg-[#3a3a3a]" style={{ height: RULER_H }} />
-                  <span className="text-[9px] text-gray-500 absolute top-1" style={{ left: 2 }}>{fmtRuler(sec)}</span>
-                </div>
-              ))}
-              {interval >= 2 && ticks.flatMap((sec) =>
-                Array.from({ length: 4 }, (_, j) => sec + interval * (j + 1) / 5)
-                  .filter((s) => s < TIMELINE_SECS)
-                  .map((s) => (
-                    <div key={`sub-${s}`} className="absolute bottom-0 w-px bg-[#2a2a2a]" style={{ left: s * zoom, height: 6 }} />
-                  ))
+              {beatTicks
+                .filter(({ isBar }) => isBar || showBeatLines)
+                .map(({ i, sec, isBar, bar, beatInBar }) => (
+                  <div key={i} className="absolute top-0" style={{ left: sec * zoom }}>
+                    {/* tick line */}
+                    <div
+                      className="absolute w-px"
+                      style={{
+                        top: isBar ? 0 : RULER_H / 2,
+                        height: isBar ? RULER_H : RULER_H / 2,
+                        backgroundColor: isBar ? "#505050" : "#303030",
+                      }}
+                    />
+                    {/* bar number */}
+                    {isBar && (
+                      <span
+                        className="absolute text-[9px] font-mono text-gray-400 leading-none"
+                        style={{ left: 3, top: 3 }}
+                      >
+                        {bar}
+                      </span>
+                    )}
+                    {/* beat number inside bar (only at high zoom) */}
+                    {!isBar && beatPx >= 30 && (
+                      <span
+                        className="absolute text-[8px] font-mono text-gray-700 leading-none"
+                        style={{ left: 3, bottom: 3 }}
+                      >
+                        {beatInBar}
+                      </span>
+                    )}
+                  </div>
+                ))
+              }
+              {/* 16th-note sub-beat ticks at very high zoom */}
+              {showSubBeats && beatTicks.flatMap(({ i, sec }) =>
+                [1, 2, 3].map((j) => {
+                  const subSec = sec + j * secPerBeat / 4;
+                  if (subSec >= TIMELINE_SECS) return null;
+                  return (
+                    <div
+                      key={`sub-${i}-${j}`}
+                      className="absolute bottom-0 w-px"
+                      style={{ left: subSec * zoom, height: 5, backgroundColor: "#222" }}
+                    />
+                  );
+                })
               )}
             </div>
 
@@ -1049,6 +1144,22 @@ export default function DawPage() {
 
             {/* Beat clip row */}
             <div className="relative border-b border-[#2a2a2a] overflow-hidden" style={{ height: TRACK_H, backgroundColor: "rgba(127,29,29,0.2)" }}>
+              {/* BPM grid */}
+              <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                {beatTicks.filter(({ isBar }) => isBar || showBeatLines).map(({ i, sec, isBar }) => (
+                  <div key={i} className="absolute top-0 bottom-0 w-px" style={{
+                    left: sec * zoom,
+                    backgroundColor: isBar ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.035)",
+                  }} />
+                ))}
+                {showSubBeats && beatTicks.flatMap(({ i, sec }) =>
+                  [1, 2, 3].map((j) => {
+                    const subSec = sec + j * secPerBeat / 4;
+                    if (subSec >= TIMELINE_SECS) return null;
+                    return <div key={`s-${i}-${j}`} className="absolute top-0 bottom-0 w-px" style={{ left: subSec * zoom, backgroundColor: "rgba(255,255,255,0.012)" }} />;
+                  })
+                )}
+              </div>
               <div id="daw-yt-player" className="hidden absolute" />
               <div className="absolute inset-0 flex items-center px-2">
                 <div className="flex w-full items-center gap-[1px]" style={{ height: 52 }}>
@@ -1076,6 +1187,22 @@ export default function DawPage() {
                   className="relative border-b border-[#1e1e1e]"
                   style={{ height: TRACK_H, backgroundColor: armedLane === lane.id ? `${lane.color}06` : "#141414" }}
                 >
+                  {/* BPM grid */}
+                  <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                    {beatTicks.filter(({ isBar }) => isBar || showBeatLines).map(({ i: bi, sec, isBar }) => (
+                      <div key={bi} className="absolute top-0 bottom-0 w-px" style={{
+                        left: sec * zoom,
+                        backgroundColor: isBar ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.025)",
+                      }} />
+                    ))}
+                    {showSubBeats && beatTicks.flatMap(({ i: bi, sec }) =>
+                      [1, 2, 3].map((j) => {
+                        const subSec = sec + j * secPerBeat / 4;
+                        if (subSec >= TIMELINE_SECS) return null;
+                        return <div key={`s-${bi}-${j}`} className="absolute top-0 bottom-0 w-px" style={{ left: subSec * zoom, backgroundColor: "rgba(255,255,255,0.008)" }} />;
+                      })
+                    )}
+                  </div>
                   {lane.blobUrl ? (
                     <>
                       <div
@@ -1130,7 +1257,7 @@ export default function DawPage() {
                 borderTop: "10px solid rgba(255,255,255,0.9)",
               }} />
               <div className="absolute text-[9px] font-mono text-white/80 bg-black/60 px-1 rounded" style={{ top: RULER_H - 22, left: 4, whiteSpace: "nowrap" }}>
-                {fmtTime(time)}
+                {fmtBarBeat(time, secPerBeat)} · {fmtTime(time)}
               </div>
             </div>
           </div>
