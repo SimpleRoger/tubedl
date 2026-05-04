@@ -13,6 +13,7 @@ import dawProjectsRouter from "./daw-projects";
 import yogaRouter from "./yoga";
 import detectKeyRouter from "./detect-key";
 import detectBpmRouter from "./detect-bpm";
+import waveformRouter from "./waveform";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(dawProjectsRouter);
 router.use(yogaRouter);
 router.use(detectKeyRouter);
 router.use(detectBpmRouter);
+router.use(waveformRouter);
 
 export default router;

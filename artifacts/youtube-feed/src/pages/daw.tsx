@@ -89,8 +89,12 @@ type SavedProject = {
 };
 
 // ── Waveform canvas ───────────────────────────────────────────────────────────
-function WaveCanvas({ data, color, widthPx }: { data: number[]; color: string; widthPx: number }) {
+function WaveCanvas({
+  data, color, widthPx, maxCanvasW = 4000,
+}: { data: number[]; color: string; widthPx: number; maxCanvasW?: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  // Cap canvas pixel width for performance; CSS stretches it to actual widthPx
+  const canvasW = Math.max(1, Math.min(maxCanvasW, Math.round(widthPx)));
   useEffect(() => {
     const c = ref.current;
     if (!c || data.length === 0) return;
@@ -104,8 +108,8 @@ function WaveCanvas({ data, color, widthPx }: { data: number[]; color: string; w
       const h = Math.max(2, v * mid * 1.8);
       ctx.fillRect(i * bw, mid - h / 2, Math.max(1, bw - 0.5), h);
     });
-  }, [data, color, widthPx]);
-  return <canvas ref={ref} width={Math.max(1, Math.round(widthPx))} height={56} style={{ width: widthPx, height: "100%" }} />;
+  }, [data, color, canvasW]);
+  return <canvas ref={ref} width={canvasW} height={56} style={{ width: widthPx, height: "100%" }} />;
 }
 
 const BEAT_BARS = Array.from({ length: 200 }, (_, i) =>
@@ -190,6 +194,9 @@ export default function DawPage() {
   const [bpmErrMsg, setBpmErrMsg]       = useState("");
   const tapTimesRef                      = useRef<number[]>([]);
   const tapResetRef                      = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [beatWaveform, setBeatWaveform]   = useState<number[]>([]);
+  const [beatDurationSec, setBeatDurationSec] = useState(0);
+  const [beatWaveStatus, setBeatWaveStatus]   = useState<"idle"|"loading"|"ready"|"err">("idle");
 
   const ytRef      = useRef<any>(null);
   const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -223,6 +230,28 @@ export default function DawPage() {
       if (raw) { sessionStorage.removeItem(BEAT_KEY); setBeat(JSON.parse(raw)); }
     } catch { /* ignore */ }
   }, []);
+
+  // ── Fetch beat waveform whenever beat changes ──
+  useEffect(() => {
+    if (!beat?.videoId) return;
+    setBeatWaveform([]);
+    setBeatDurationSec(0);
+    setBeatWaveStatus("loading");
+    const ctrl = new AbortController();
+    fetch(`${import.meta.env.BASE_URL}api/waveform/${beat.videoId}`, { signal: ctrl.signal })
+      .then((r) => r.json())
+      .then((body: { peaks?: number[]; durationSec?: number; error?: string }) => {
+        if (body.error && (!body.peaks || body.peaks.length === 0)) {
+          setBeatWaveStatus("err");
+        } else {
+          setBeatWaveform(body.peaks ?? []);
+          setBeatDurationSec(body.durationSec ?? 0);
+          setBeatWaveStatus("ready");
+        }
+      })
+      .catch((e) => { if (e?.name !== "AbortError") setBeatWaveStatus("err"); });
+    return () => ctrl.abort();
+  }, [beat?.videoId]);
 
   // ── Boot YouTube player whenever beat changes ──
   useEffect(() => {
@@ -1237,16 +1266,40 @@ export default function DawPage() {
                 )}
               </div>
               <div id="daw-yt-player" className="hidden absolute" />
-              <div className="absolute inset-0 flex items-center px-2">
-                <div className="flex w-full items-center gap-[1px]" style={{ height: 52 }}>
-                  {BEAT_BARS.map((h, i) => (
-                    <div key={i} className="flex-1 rounded-[1px]" style={{
-                      height: `${h}%`, minWidth: 1,
-                      backgroundColor: `rgba(239,68,68,${isPlaying ? 0.45 + Math.sin(i * 0.5 + time * 6) * 0.08 : 0.4})`,
-                    }} />
-                  ))}
+              {/* Beat waveform */}
+              {beatWaveStatus === "loading" ? (
+                <div className="absolute inset-0 flex items-center px-3 pointer-events-none">
+                  <div className="w-full h-8 rounded bg-red-900/30 overflow-hidden relative">
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-red-700/20 to-transparent animate-[shimmer_1.5s_ease-in-out_infinite]" style={{ backgroundSize: "200% 100%" }} />
+                  </div>
                 </div>
-              </div>
+              ) : beatWaveStatus === "ready" && beatWaveform.length > 0 ? (
+                <div
+                  className="absolute pointer-events-none overflow-hidden"
+                  style={{ top: 7, bottom: 7, left: 0, width: Math.max(beatDurationSec * zoom, (tlRef.current?.clientWidth ?? 0) + (tlRef.current?.scrollLeft ?? 0)) }}
+                >
+                  <div className="w-full h-full rounded overflow-hidden" style={{ backgroundColor: "rgba(239,68,68,0.07)", borderRight: "1px solid rgba(239,68,68,0.25)" }}>
+                    <WaveCanvas
+                      data={beatWaveform}
+                      color="#ef4444"
+                      widthPx={Math.max(beatDurationSec * zoom, (tlRef.current?.clientWidth ?? 800))}
+                      maxCanvasW={3000}
+                    />
+                  </div>
+                </div>
+              ) : (
+                /* Fallback decorative bars when waveform unavailable */
+                <div className="absolute inset-0 flex items-center px-2 pointer-events-none">
+                  <div className="flex w-full items-center gap-[1px]" style={{ height: 52 }}>
+                    {BEAT_BARS.map((h, i) => (
+                      <div key={i} className="flex-1 rounded-[1px]" style={{
+                        height: `${h}%`, minWidth: 1,
+                        backgroundColor: `rgba(239,68,68,${isPlaying ? 0.45 + Math.sin(i * 0.5 + time * 6) * 0.08 : 0.4})`,
+                      }} />
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="absolute top-1.5 left-3 z-10 flex items-center gap-1.5">
                 <span className="text-[10px] font-bold text-red-400 bg-black/50 px-1.5 py-0.5 rounded">Beat</span>
                 <span className="text-[10px] text-gray-500 truncate max-w-[180px]">{beat.title}</span>
