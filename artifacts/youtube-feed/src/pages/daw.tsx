@@ -175,6 +175,7 @@ export default function DawPage() {
   const [ytReady, setYtReady]         = useState(false);
   const [micError, setMicError]       = useState(false);
   const [beatMuted, setBeatMuted]     = useState(false);
+  const [beatVolume, setBeatVolume]   = useState(100);
   const [zoom, setZoom]               = useState(50);
   // Save / Projects / Export
   const [saveState, setSaveState]     = useState<"idle"|"saving"|"saved"|"error">("idle");
@@ -837,10 +838,9 @@ export default function DawPage() {
     if (armedLane < 0 || !ytReady) return;
     stopAll(); setMicError(false);
     try {
-      // Enable echo cancellation when beat is audible to reduce bleed from speakers
       const audioConstraints: MediaTrackConstraints = {
         ...(selectedMicId ? { deviceId: { exact: selectedMicId } } : {}),
-        echoCancellation: !beatMuted,
+        echoCancellation: false,
         noiseSuppression: false,
         autoGainControl: false,
       };
@@ -1104,11 +1104,6 @@ export default function DawPage() {
         <div className="shrink-0 flex items-center gap-2">
           {!ytReady && <span className="flex items-center gap-1 text-gray-500 text-xs"><Loader2 className="w-3 h-3 animate-spin" />Loading…</span>}
           {micError && <span className="text-red-400 text-xs">Mic denied</span>}
-          {isRecording && !beatMuted && (
-            <span className="flex items-center gap-1 text-amber-400 text-xs font-medium border border-amber-700/50 bg-amber-950/40 px-2 py-0.5 rounded-md" title="Beat is playing through speakers — mic may pick it up. Use headphones for clean recordings.">
-              🎧 Use headphones
-            </span>
-          )}
           {isRecording && <span className="flex items-center gap-1.5 text-red-400 font-bold text-xs animate-pulse"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" />REC</span>}
 
           {/* Projects button */}
@@ -1171,7 +1166,21 @@ export default function DawPage() {
             <img src={beat.thumbnailUrl} className="w-9 h-9 rounded-lg object-cover shrink-0 border border-[#333]" alt="" />
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-bold text-gray-300 truncate">Beat</p>
-              <p className="text-[10px] text-gray-600 truncate">{beat.channelName}</p>
+              <div className="flex items-center gap-1 mt-1">
+                <Volume2 className="w-2.5 h-2.5 text-gray-700 shrink-0" />
+                <input
+                  type="range" min={0} max={100} value={beatVolume}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setBeatVolume(v);
+                    try { ytRef.current?.setVolume?.(v); if (v > 0 && beatMuted) { setBeatMuted(false); ytRef.current?.unMute?.(); } } catch (_) {}
+                  }}
+                  className="flex-1 h-1 cursor-pointer min-w-0"
+                  style={{ accentColor: "#ef4444" }}
+                  title="Beat volume"
+                />
+                <span className="text-[9px] text-gray-600 w-6 text-right shrink-0">{beatVolume}</span>
+              </div>
             </div>
             <button
               onClick={() => {
