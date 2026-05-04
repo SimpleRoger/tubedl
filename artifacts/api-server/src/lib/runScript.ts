@@ -6,17 +6,26 @@ const PYTHON =
   process.env.PYTHON_PATH ??
   path.resolve(__dirname, "../../../.pythonlibs/bin/python3");
 
-const BOT_PHRASES = ["Sign in", "bot", "confirm your age", "This video is unavailable"];
+const RETRY_PHRASES = [
+  // YouTube bot detection
+  "Sign in", "bot", "confirm your age", "This video is unavailable",
+  // Proxy failures — pick a different proxy and retry
+  "407", "CONNECT tunnel failed", "curl: (56)", "curl: (35)",
+  "ProxyError", "tunnel", "response 407",
+];
 
-function isBlockedError(msg: string): boolean {
-  return BOT_PHRASES.some((p) => msg.includes(p));
+function isRetryableError(msg: string): boolean {
+  return RETRY_PHRASES.some((p) => msg.includes(p));
 }
 
-function runOnce<T>(scriptPath: string, videoId: string): Promise<T> {
+function runOnce<T>(scriptPath: string, videoId: string, useProxy = true): Promise<T> {
   return new Promise((resolve, reject) => {
     const ytdlp = getYtdlpBin();
     const cookies = cookieArgs();
-    const servers = serverArgs();
+    const servers = useProxy ? serverArgs() : [
+      "--extractor-args", "youtube:player_client=ios,mweb,tv",
+      "--impersonate", "chrome",
+    ];
     const args = [scriptPath, videoId, ytdlp, ...cookies, ...servers];
     const child = spawn(PYTHON, args);
     const out: Buffer[] = [];
@@ -47,7 +56,8 @@ function runOnce<T>(scriptPath: string, videoId: string): Promise<T> {
   });
 }
 
-/** Run the script, retrying up to `maxAttempts` times on bot-block errors. */
+/** Run the script, retrying up to `maxAttempts` times on retryable errors.
+ *  The final attempt always runs without a proxy as a last-resort fallback. */
 export async function runScript<T>(
   scriptPath: string,
   videoId: string,
@@ -55,14 +65,21 @@ export async function runScript<T>(
 ): Promise<T> {
   let lastErr = new Error("Unknown error");
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    // Last attempt: try without proxy in case all proxies are failing
+    const useProxy = attempt < maxAttempts;
     try {
-      return await runOnce<T>(scriptPath, videoId);
+      return await runOnce<T>(scriptPath, videoId, useProxy);
     } catch (e) {
       lastErr = e as Error;
-      if (attempt < maxAttempts && isBlockedError(lastErr.message)) {
+      if (attempt < maxAttempts && isRetryableError(lastErr.message)) {
         continue;
       }
-      break;
+      // If the proxied attempt failed for a non-retryable reason, jump to no-proxy attempt
+      if (attempt < maxAttempts) {
+        attempt = maxAttempts - 1; // will increment to maxAttempts (no-proxy) next
+      } else {
+        break;
+      }
     }
   }
   throw lastErr;

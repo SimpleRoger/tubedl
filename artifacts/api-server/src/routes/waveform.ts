@@ -43,7 +43,7 @@ router.get("/waveform/:videoId", async (req, res) => {
   // Run YouTube API duration fetch and audio download in parallel
   const [ytDuration, scriptResult] = await Promise.allSettled([
     fetchYtDuration(videoId),
-    runScript<{ peaks: number[]; durationSec: number }>(DETECT_SCRIPT, videoId, 2),
+    runScript<{ peaks: number[]; durationSec: number }>(DETECT_SCRIPT, videoId, 5),
   ]);
 
   if (scriptResult.status === "fulfilled") {

@@ -115,8 +115,11 @@ def main():
 
         wav_files = [f for f in os.listdir(tmpdir) if f.endswith(".wav")]
         if not wav_files:
-            err = result.stderr.decode(errors="replace")[-300:]
-            print(json.dumps({"error": f"No audio produced: {err}"}))
+            err = result.stderr.decode(errors="replace")[-500:]
+            # Include the beginning of the error too — some keywords appear early
+            err_full = result.stderr.decode(errors="replace")
+            err_snippet = (err_full[:200] + " ... " + err_full[-300:]) if len(err_full) > 500 else err_full
+            print(json.dumps({"error": f"No audio produced: {err_snippet}"}))
             sys.exit(1)
 
         wav_path = os.path.join(tmpdir, wav_files[0])
