@@ -40,19 +40,20 @@ setInterval(() => {
 }, 10 * 60 * 1000);
 
 // ── Quality selection ────────────────────────────────────────────────────────
-// Priority:
-//  1. Best 1080p mp4 video + m4a audio (AAC) — merged by ffmpeg; AAC is
-//     natively compatible with the MP4 container so no transcoding needed.
-//  2. Best ≤1080p video + m4a audio (any video codec).
-//  3. Best combined single-file format ≤1080p (progressive, includes audio).
-//  4. Absolute fallback.
+// Priority (high → low):
+//  1. Best ≤1080p video + any best audio — ffmpeg merges into mp4 container.
+//     No codec restriction so yt-dlp always picks the highest-res stream.
+//  2. Best ≤1080p video + m4a (AAC) — slightly narrower fallback.
+//  3. Best uncapped video + any audio — no height limit, still DASH.
+//  4. Any single combined stream — last resort (usually 360p progressive).
 //
-// We avoid bestaudio without ext=m4a to prevent opus-in-mp4 issues (opus in
-// an MP4 container is not widely supported and can result in silent video).
+// --merge-output-format mp4 + ffmpeg handle any audio codec, so we don't
+// need to restrict to m4a here. Restricting to [ext=m4a] was the root cause
+// of falling through to the low-quality combined stream.
 const FORMAT_1080 = [
-  "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]",
+  "bestvideo[height<=1080]+bestaudio",
   "bestvideo[height<=1080]+bestaudio[ext=m4a]",
-  "best[height<=1080]",
+  "bestvideo+bestaudio",
   "best",
 ].join("/");
 
