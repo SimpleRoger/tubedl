@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link } from "wouter";
 import {
   Plus, Youtube, AlertCircle, RefreshCw, Music2, FileText,
   Mic, Clock, Flame, Bookmark, Wand2, Dumbbell, Sliders,
+  Search, X, Loader2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "../lib/utils";
 import { useVideos } from "../hooks/use-videos";
 import { useChannels } from "../hooks/use-channels";
+import { useVideoSearch } from "../hooks/use-video-search";
 import { VideoCard } from "../components/video-card";
 import { VideoSkeleton } from "../components/video-skeleton";
 import { ChannelSidebar } from "../components/channel-sidebar";
@@ -20,6 +22,24 @@ export default function Home() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [activeVideo, setActiveVideo] = useState<Video | null>(null);
   const [order, setOrder] = useState<"recent" | "popular">("recent");
+  const [searchInput, setSearchInput] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { state: searchState, search, clear } = useVideoSearch();
+
+  const isSearchMode = searchInput.trim().length >= 2;
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (searchInput.trim().length >= 2) {
+      debounceRef.current = setTimeout(() => search(searchInput.trim()), 400);
+    } else {
+      clear();
+    }
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [searchInput]);
+
+  function clearSearch() { setSearchInput(""); clear(); searchRef.current?.focus(); }
 
   const { data: channels } = useChannels();
   const { data: videos, isLoading: isVideosLoading, isError, error, refetch } = useVideos(selectedChannelId, order);
@@ -86,8 +106,28 @@ export default function Home() {
           </nav>
         </div>
 
-        {/* Right side: add channel */}
+        {/* Right side: search + add channel */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* Search bar */}
+          <div className="relative hidden sm:flex items-center">
+            <Search className="absolute left-3 w-4 h-4 text-text-muted pointer-events-none" />
+            <input
+              ref={searchRef}
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search videos…"
+              className="w-48 lg:w-64 bg-surface border border-border rounded-lg pl-9 pr-8 py-1.5 text-sm text-text-main placeholder:text-text-muted focus:outline-none focus:border-primary/50 transition-colors"
+            />
+            {searchInput && (
+              <button onClick={clearSearch} className="absolute right-2.5 text-text-muted hover:text-white transition-colors">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {isSearchMode && searchState.status === "loading" && (
+              <Loader2 className="absolute right-2.5 w-3.5 h-3.5 text-text-muted animate-spin" />
+            )}
+          </div>
           <button
             onClick={() => setIsAddModalOpen(true)}
             className="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg font-medium text-sm transition-all shadow-[0_0_15px_rgba(255,0,0,0.3)] hover:shadow-[0_0_20px_rgba(255,0,0,0.5)] flex items-center gap-2 outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-background"
@@ -124,13 +164,34 @@ export default function Home() {
 
                 <div className="mb-8 flex items-center justify-between gap-4 flex-wrap">
                   <h2 className="text-2xl font-display font-bold text-text-main">
-                    {selectedChannelId
-                      ? channels?.find(c => c.id === selectedChannelId)?.name || "Channel Videos"
-                      : order === "popular" ? "Most Popular" : "Recent Uploads"}
+                    {isSearchMode
+                      ? searchState.status === "done"
+                        ? `Results for "${searchState.query}"`
+                        : "Searching…"
+                      : selectedChannelId
+                        ? channels?.find(c => c.id === selectedChannelId)?.name || "Channel Videos"
+                        : order === "popular" ? "Most Popular" : "Recent Uploads"}
                   </h2>
 
                   <div className="flex items-center gap-2">
-                    {(channels?.length ?? 0) > 0 && (
+                    {/* Mobile search */}
+                    <div className="relative flex sm:hidden items-center">
+                      <Search className="absolute left-3 w-4 h-4 text-text-muted pointer-events-none" />
+                      <input
+                        type="text"
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        placeholder="Search…"
+                        className="w-36 bg-surface border border-border rounded-lg pl-9 pr-8 py-1.5 text-sm text-text-main placeholder:text-text-muted focus:outline-none focus:border-primary/50"
+                      />
+                      {searchInput && (
+                        <button onClick={clearSearch} className="absolute right-2.5 text-text-muted hover:text-white">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {!isSearchMode && (channels?.length ?? 0) > 0 && (
                       <div className="flex items-center gap-1 bg-surface border border-border rounded-lg p-1">
                         <button
                           onClick={() => setOrder("recent")}
@@ -156,18 +217,47 @@ export default function Home() {
                         </button>
                       </div>
                     )}
-                    <button
-                      onClick={() => refetch()}
-                      disabled={isVideosLoading}
-                      className="p-2 text-text-muted hover:text-white rounded-full hover:bg-surface-hover transition-colors disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                      title="Refresh feed"
-                    >
-                      <RefreshCw className={cn("w-5 h-5", isVideosLoading && "animate-spin")} />
-                    </button>
+                    {!isSearchMode && (
+                      <button
+                        onClick={() => refetch()}
+                        disabled={isVideosLoading}
+                        className="p-2 text-text-muted hover:text-white rounded-full hover:bg-surface-hover transition-colors disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        title="Refresh feed"
+                      >
+                        <RefreshCw className={cn("w-5 h-5", isVideosLoading && "animate-spin")} />
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                {isError ? (
+                {/* ── Search results ── */}
+                {isSearchMode ? (
+                  searchState.status === "loading" ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-x-4 gap-y-8 sm:gap-x-6">
+                      {Array.from({ length: 8 }).map((_, i) => <VideoSkeleton key={i} />)}
+                    </div>
+                  ) : searchState.status === "done" && searchState.results.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                      <Search className="w-10 h-10 text-text-muted/30 mb-4" />
+                      <p className="text-text-main font-semibold mb-1">No results for "{searchState.query}"</p>
+                      <p className="text-text-muted text-sm">Try different keywords</p>
+                    </div>
+                  ) : searchState.status === "done" ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-x-4 gap-y-8 sm:gap-x-6">
+                      {searchState.results.map((video, index) => (
+                        <motion.div key={`${video.videoId}-${index}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: Math.min(index * 0.04, 0.4) }}>
+                          <VideoCard video={video} onClick={setActiveVideo} />
+                        </motion.div>
+                      ))}
+                    </div>
+                  ) : searchState.status === "error" ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                      <AlertCircle className="w-10 h-10 text-primary/50 mb-4" />
+                      <p className="text-text-main font-semibold mb-1">Search failed</p>
+                      <p className="text-text-muted text-sm">{searchState.error}</p>
+                    </div>
+                  ) : null
+                ) : isError ? (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                     className="p-8 sm:p-12 bg-surface rounded-2xl border border-red-500/20 text-center max-w-2xl mx-auto mt-10 shadow-xl"
