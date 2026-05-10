@@ -89,12 +89,11 @@ type SavedProject = {
   createdAt: string; updatedAt: string;
 };
 
-// ── Waveform canvas ───────────────────────────────────────────────────────────
+// ── Waveform canvas (FL Studio style) ────────────────────────────────────────
 function WaveCanvas({
   data, color, widthPx, maxCanvasW = 4000,
 }: { data: number[]; color: string; widthPx: number; maxCanvasW?: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  // Cap canvas pixel width for performance; CSS stretches it to actual widthPx
   const canvasW = Math.max(1, Math.min(maxCanvasW, Math.round(widthPx)));
   useEffect(() => {
     const c = ref.current;
@@ -103,18 +102,59 @@ function WaveCanvas({
     if (!ctx) return;
     const W = c.width, H = c.height, mid = H / 2;
     ctx.clearRect(0, 0, W, H);
-    const bw = W / data.length;
-    ctx.fillStyle = color; ctx.globalAlpha = 0.85;
-    data.forEach((v, i) => {
-      const h = Math.max(2, v * mid * 1.8);
-      ctx.fillRect(i * bw, mid - h / 2, Math.max(1, bw - 0.5), h);
-    });
+
+    const factor = 0.93;
+    const step = W / data.length;
+
+    // ── Filled body ──────────────────────────────────────────────────────────
+    ctx.beginPath();
+    // top edge: left → right
+    for (let i = 0; i < data.length; i++) {
+      const x = (i + 0.5) * step;
+      const y = mid - data[i] * mid * factor;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    // bottom edge: right → left (mirror)
+    for (let i = data.length - 1; i >= 0; i--) {
+      ctx.lineTo((i + 0.5) * step, mid + data[i] * mid * factor);
+    }
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.35;
+    ctx.fill();
+
+    // ── Top outline (brighter) ───────────────────────────────────────────────
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+
+    ctx.beginPath();
+    for (let i = 0; i < data.length; i++) {
+      const x = (i + 0.5) * step;
+      const y = mid - data[i] * mid * factor;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // ── Bottom outline (mirror) ──────────────────────────────────────────────
+    ctx.beginPath();
+    for (let i = 0; i < data.length; i++) {
+      const x = (i + 0.5) * step;
+      const y = mid + data[i] * mid * factor;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    ctx.globalAlpha = 1;
   }, [data, color, canvasW]);
   return <canvas ref={ref} width={canvasW} height={56} style={{ width: widthPx, height: "100%" }} />;
 }
 
-const BEAT_BARS = Array.from({ length: 200 }, (_, i) =>
-  30 + Math.abs(Math.sin(i * 0.37) * 52 + Math.sin(i * 0.13 + 1) * 28)
+// Normalized 0-1 fallback waveform for when beat audio isn't decoded yet
+const BEAT_BARS = Array.from({ length: 400 }, (_, i) =>
+  Math.min(1, (30 + Math.abs(Math.sin(i * 0.37) * 52 + Math.sin(i * 0.13 + 1) * 28)) / 100)
 );
 
 // ── Vocal FX types ────────────────────────────────────────────────────────────
@@ -485,12 +525,15 @@ export default function DawPage() {
       const ac = new AudioContext();
       const buf = await ac.decodeAudioData(await blob.arrayBuffer());
       const raw = buf.getChannelData(0);
-      const N = 300, blk = Math.floor(raw.length / N);
+      const N = 800, blk = Math.floor(raw.length / N);
       const wf: number[] = [];
       for (let i = 0; i < N; i++) {
-        let s = 0;
-        for (let j = 0; j < blk; j++) s += Math.abs(raw[i * blk + j] || 0);
-        wf.push(Math.min(1, (s / blk) * 6));
+        let peak = 0;
+        for (let j = 0; j < blk; j++) {
+          const v = Math.abs(raw[i * blk + j] || 0);
+          if (v > peak) peak = v;
+        }
+        wf.push(Math.min(1, peak * 1.4));
       }
       await ac.close();
       setLanes((p) => p.map((l) => l.id === laneId
@@ -1422,15 +1465,10 @@ export default function DawPage() {
                   </div>
                 </div>
               ) : (
-                /* Fallback decorative bars when waveform unavailable */
-                <div className="absolute inset-0 flex items-center px-2 pointer-events-none">
-                  <div className="flex w-full items-center gap-[1px]" style={{ height: 52 }}>
-                    {BEAT_BARS.map((h, i) => (
-                      <div key={i} className="flex-1 rounded-[1px]" style={{
-                        height: `${h}%`, minWidth: 1,
-                        backgroundColor: `rgba(239,68,68,${isPlaying ? 0.45 + Math.sin(i * 0.5 + time * 6) * 0.08 : 0.4})`,
-                      }} />
-                    ))}
+                /* Fallback decorative waveform when beat audio isn't decoded */
+                <div className="absolute pointer-events-none overflow-hidden" style={{ top: 7, bottom: 7, left: 0, right: 0 }}>
+                  <div className="w-full h-full overflow-hidden" style={{ backgroundColor: "rgba(239,68,68,0.07)" }}>
+                    <WaveCanvas data={BEAT_BARS} color="#ef4444" widthPx={Math.max(600, (tlRef.current?.clientWidth ?? 800) + (tlRef.current?.scrollLeft ?? 0))} maxCanvasW={3000} />
                   </div>
                 </div>
               )}
