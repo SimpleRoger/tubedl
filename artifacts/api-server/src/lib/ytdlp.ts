@@ -179,11 +179,34 @@ function pickProxy(): string | null {
   return process.env.YTDLP_PROXY?.trim() ?? null;
 }
 
-export function serverArgs(): string[] {
-  const args: string[] = [
+/**
+ * Returns a shuffled list of proxies to try, ending with null (direct).
+ * Caps at 3 proxy attempts before falling back to direct.
+ */
+export function getProxyList(): Array<string | null> {
+  const raw = process.env.YTDLP_PROXY_LIST?.trim() ?? "";
+  const proxies = raw.split(",").map(p => p.trim()).filter(Boolean);
+
+  // Shuffle for load distribution
+  for (let i = proxies.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [proxies[i], proxies[j]] = [proxies[j], proxies[i]];
+  }
+
+  const unique = [...new Set(proxies)].slice(0, 3);
+  return [...unique, null];
+}
+
+/** Base yt-dlp args without a proxy — pass proxy separately for retry loops. */
+export function baseServerArgs(): string[] {
+  return [
     "--extractor-args", "youtube:player_client=web_embedded,web",
     "--impersonate", "chrome",
   ];
+}
+
+export function serverArgs(): string[] {
+  const args = baseServerArgs();
 
   const proxy = pickProxy();
   if (proxy) {

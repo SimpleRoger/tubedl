@@ -8,7 +8,7 @@ import { db, beatChannelsTable } from "@workspace/db";
 import { AddChannelBody, RemoveChannelParams } from "@workspace/api-zod";
 import { resolveChannelInfo, searchChannels, fetchRecentVideos } from "../lib/youtube";
 
-import { getYtdlpBin, getFfmpegBin, YTDLP_CACHE_DIR, ffmpegArgs, cookieArgs, serverArgs } from "../lib/ytdlp";
+import { getYtdlpBin, getFfmpegBin, YTDLP_CACHE_DIR, ffmpegArgs, cookieArgs, baseServerArgs, getProxyList } from "../lib/ytdlp";
 
 const router: IRouter = Router();
 
@@ -221,38 +221,53 @@ router.get("/beats/:videoId/download", async (req, res): Promise<void> => {
   let clipFile: string | null = null;
 
   try {
-    // Step 1: Download full audio — no --download-sections so the request goes through
-    // the same proxy/cookie path that works for regular beat downloads.
-    // Clips are trimmed in Step 2 with ffmpeg after a successful full download.
-    await new Promise<void>((resolve, reject) => {
-      const ytdlp = spawn(getYtdlpBin(), [
-        "--format", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
-        "-o", tmpTemplate,
-        "--no-playlist",
-        "--no-warnings",
-        "--cache-dir", YTDLP_CACHE_DIR,
-        ...serverArgs(),
-        ...ffmpegArgs(),
-        ...cookieArgs(),
-        `https://www.youtube.com/watch?v=${videoId}`,
-      ]);
+    // Step 1: Download full audio with proxy retry logic.
+    // Try each proxy in turn; fall back to direct if all fail.
+    const proxyList = getProxyList();
+    let lastErr: Error | null = null;
 
-      const stderrLines: string[] = [];
-      ytdlp.stderr.on("data", (chunk: Buffer) => {
-        stderrLines.push(chunk.toString().trim());
+    for (let attempt = 0; attempt < proxyList.length; attempt++) {
+      const proxy = proxyList[attempt];
+      const proxyArgs = proxy ? ["--proxy", proxy] : [];
+      if (proxy) {
+        req.log?.info({ proxy: proxy.replace(/:[^:@]+@/, ":***@"), attempt }, "beat download attempt");
+      }
+
+      const succeeded = await new Promise<boolean>((resolve) => {
+        const ytdlp = spawn(getYtdlpBin(), [
+          "--format", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
+          "-o", tmpTemplate,
+          "--no-playlist",
+          "--no-warnings",
+          "--cache-dir", YTDLP_CACHE_DIR,
+          ...baseServerArgs(),
+          ...proxyArgs,
+          ...ffmpegArgs(),
+          ...cookieArgs(),
+          `https://www.youtube.com/watch?v=${videoId}`,
+        ]);
+
+        const stderrLines: string[] = [];
+        ytdlp.stderr.on("data", (chunk: Buffer) => stderrLines.push(chunk.toString().trim()));
+        ytdlp.on("error", (err: Error) => { lastErr = err; resolve(false); });
+        ytdlp.on("close", (code: number | null) => {
+          if (code === 0) {
+            resolve(true);
+          } else {
+            const msg = stderrLines.slice(-3).join(" | ");
+            lastErr = new Error(`yt-dlp exited ${code}: ${msg}`);
+            resolve(false);
+          }
+        });
+        req.on("close", () => { ytdlp.kill("SIGTERM"); lastErr = new Error("client disconnected"); resolve(false); });
       });
 
-      ytdlp.on("error", (err: Error) => reject(err));
-      ytdlp.on("close", (code: number | null) => {
-        if (code !== 0) {
-          reject(new Error(`yt-dlp exited ${code}: ${stderrLines.slice(-3).join(" | ")}`));
-        } else {
-          resolve();
-        }
-      });
+      if (succeeded) { lastErr = null; break; }
+      if (lastErr?.message === "client disconnected") break;
+      req.log?.warn({ attempt, proxy: proxy ?? "direct", err: lastErr?.message }, "beat download attempt failed, retrying");
+    }
 
-      req.on("close", () => { ytdlp.kill("SIGTERM"); reject(new Error("client disconnected")); });
-    });
+    if (lastErr) throw lastErr;
 
     // Find the file yt-dlp wrote (extension is unknown ahead of time)
     const entries = fs.readdirSync(tmpDir).filter(f => f.startsWith(path.basename(tmpBase)));
