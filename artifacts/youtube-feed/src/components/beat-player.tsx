@@ -34,24 +34,36 @@ const DAW_BEAT_KEY = "tubefeed-daw-beat";
 /** Build a filesystem-friendly filename from a beat title.
  *  Format: key_bpmBPM_clean-title  e.g. cmajor_154bpm_acoustic_guitar_fakemink_jerk_type_beat
  *  Falls back gracefully when key/BPM can't be parsed from the title. */
-function buildBeatFilename(title: string, clipStart?: string, clipEnd?: string): string {
+function buildBeatFilename(
+  title: string,
+  clipStart?: string,
+  clipEnd?: string,
+  detectedBpm?: number | null,
+  detectedKey?: { note: string; mode: string } | null,
+): string {
   const slug = (s: string) =>
     s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 
-  // Extract BPM — e.g. "154bpm", "154 bpm", "@154"
-  const bpmMatch = title.match(/(?:^|[\s[@(|])(\d{2,3})\s*bpm\b/i)
-    ?? title.match(/\b(\d{2,3})\s*bpm\b/i);
-  const bpm = bpmMatch ? bpmMatch[1] : null;
+  // BPM: prefer detected, fall back to parsing the title
+  let bpm: string | null = detectedBpm ? String(detectedBpm) : null;
+  if (!bpm) {
+    const bpmMatch = title.match(/(?:^|[\s[@(|])(\d{2,3})\s*bpm\b/i)
+      ?? title.match(/\b(\d{2,3})\s*bpm\b/i);
+    bpm = bpmMatch ? bpmMatch[1] : null;
+  }
 
-  // Extract musical key — e.g. "C major", "F# minor", "Cm", "Bbmaj"
-  const keyMatch = title.match(
-    /\b([A-G][#b]?)\s*(major|maj|minor|min|m)\b/i
-  );
+  // Key: prefer detected, fall back to parsing the title
   let key: string | null = null;
-  if (keyMatch) {
-    const root = keyMatch[1].replace("#", "sharp").replace("b", "flat");
-    const mode = keyMatch[2].toLowerCase();
-    key = slug(root) + (mode === "m" || mode.startsWith("min") ? "minor" : "major");
+  if (detectedKey) {
+    const root = detectedKey.note.replace("#", "sharp").replace(/b$/, "flat");
+    key = slug(root) + (detectedKey.mode.toLowerCase().startsWith("min") ? "minor" : "major");
+  } else {
+    const keyMatch = title.match(/\b([A-G][#b]?)\s*(major|maj|minor|min|m)\b/i);
+    if (keyMatch) {
+      const root = keyMatch[1].replace("#", "sharp").replace("b", "flat");
+      const mode = keyMatch[2].toLowerCase();
+      key = slug(root) + (mode === "m" || mode.startsWith("min") ? "minor" : "major");
+    }
   }
 
   const parts: string[] = [];
@@ -62,6 +74,16 @@ function buildBeatFilename(title: string, clipStart?: string, clipEnd?: string):
   let name = parts.join("_");
   if (clipStart) name += `_${slug(clipStart)}-${slug(clipEnd ?? "end")}`;
   return `${name}.m4a`;
+}
+
+async function fetchWithTimeout<T>(url: string, ms: number): Promise<T | null> {
+  try {
+    const resp = await fetch(url, { signal: AbortSignal.timeout(ms) });
+    if (!resp.ok) return null;
+    return await resp.json() as T;
+  } catch {
+    return null;
+  }
 }
 
 export function BeatPlayer({ beat, onClose, onBeatSelect }: BeatPlayerProps) {
@@ -317,10 +339,18 @@ export function BeatPlayer({ beat, onClose, onBeatSelect }: BeatPlayerProps) {
     setShowClipPicker(false);
     if (downloadTimerRef.current) clearTimeout(downloadTimerRef.current);
     try {
+      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+      // Detect BPM + key in parallel (best-effort, 8 s timeout each)
+      const [bpmResult, keyResult] = await Promise.all([
+        fetchWithTimeout<{ bpm: number }>(`${base}/api/detect-bpm/${beat.videoId}`, 8000),
+        fetchWithTimeout<{ note: string; mode: string }>(`${base}/api/detect-key/${beat.videoId}`, 8000),
+      ]);
+
       const params = new URLSearchParams({ title: beat.title });
       if (startTime) params.set("startTime", startTime);
       if (endTime)   params.set("endTime",   endTime);
-      const url = `/api/beats/${beat.videoId}/download?${params}`;
+      const url = `${base}/api/beats/${beat.videoId}/download?${params}`;
       const resp = await fetch(url);
       if (!resp.ok) {
         let msg = "Download failed";
@@ -331,7 +361,7 @@ export function BeatPlayer({ beat, onClose, onBeatSelect }: BeatPlayerProps) {
       const blobUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = blobUrl;
-      anchor.download = buildBeatFilename(beat.title, startTime, endTime);
+      anchor.download = buildBeatFilename(beat.title, startTime, endTime, bpmResult?.bpm, keyResult);
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
