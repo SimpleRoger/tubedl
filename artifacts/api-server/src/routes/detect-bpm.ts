@@ -6,13 +6,14 @@ const router: IRouter = Router();
 
 const DETECT_SCRIPT = path.resolve(__dirname, "../../../scripts/detect_bpm.py");
 
-/** Parse BPM from a video title or description string, e.g. "140 BPM", "bpm: 120", "@ 95bpm" */
+/** Parse BPM from a video title or description string. */
 function parseBpmFromText(text: string): number | null {
   const patterns = [
-    /\b(\d{2,3})\s*bpm\b/i,           // "140 BPM"  or  "140bpm"
-    /\bbpm[:\s]+(\d{2,3})\b/i,         // "BPM: 140"  or  "bpm 140"
-    /\bat\s+(\d{2,3})\s*bpm\b/i,       // "at 140 bpm"
-    /[@#]\s*(\d{2,3})\s*bpm\b/i,       // "@140bpm"  "#140bpm"
+    /\btempo[:\s]+(\d{2,3})\b/i,         // "Tempo: 110"  or  "tempo 110"
+    /\b(\d{2,3})\s*bpm\b/i,              // "140 BPM"  or  "140bpm"
+    /\bbpm[:\s]+(\d{2,3})\b/i,           // "BPM: 140"  or  "bpm 140"
+    /\bat\s+(\d{2,3})\s*bpm\b/i,         // "at 140 bpm"
+    /[@#]\s*(\d{2,3})\s*bpm\b/i,         // "@140bpm"  "#140bpm"
     /\b(\d{2,3})\s*beats?\s+per\s+min/i, // "140 beats per min"
   ];
   for (const re of patterns) {
