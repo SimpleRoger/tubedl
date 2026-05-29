@@ -89,8 +89,10 @@ async function spawnDownload(
     const child = spawn(ytdlpBin, [
       "--cache-dir", YTDLP_CACHE_DIR,
       "--no-playlist",
-      "--extractor-args", "youtube:player_client=web_embedded,web",
-      "--impersonate", "chrome",
+      // ios player client is far less restricted than web/web_embedded on
+      // datacenter IPs — it uses YouTube's mobile API which has weaker bot
+      // detection. Fall back through mweb and web_embedded if needed.
+      "--extractor-args", "youtube:player_client=ios,mweb,web_embedded",
       ...extraArgs,
       ...ffmpegArgs(),
       ...formatArgs,
