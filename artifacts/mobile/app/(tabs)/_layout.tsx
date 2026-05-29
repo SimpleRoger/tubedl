@@ -13,24 +13,12 @@ function NativeTabLayout() {
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index">
-        <Icon sf={{ default: "house", selected: "house.fill" }} />
-        <Label>Feed</Label>
+        <Icon sf={{ default: "magnifyingglass", selected: "magnifyingglass" }} />
+        <Label>Search</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="beats">
-        <Icon sf={{ default: "music.note", selected: "music.note" }} />
-        <Label>Beats</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="recordings">
-        <Icon sf={{ default: "mic", selected: "mic.fill" }} />
-        <Label>Recordings</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="lyrics">
-        <Icon sf={{ default: "doc.text", selected: "doc.text.fill" }} />
-        <Label>Lyrics</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="saved">
-        <Icon sf={{ default: "bookmark", selected: "bookmark.fill" }} />
-        <Label>Saved</Label>
+      <NativeTabs.Trigger name="downloads">
+        <Icon sf={{ default: "arrow.down.circle", selected: "arrow.down.circle.fill" }} />
+        <Label>Downloads</Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );
@@ -38,8 +26,6 @@ function NativeTabLayout() {
 
 function ClassicTabLayout() {
   const colors = useColors();
-  const colorScheme = useColorScheme();
-  const isDark = true;
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
 
@@ -72,60 +58,24 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Feed",
+          title: "Search",
           tabBarIcon: ({ color }) =>
             isIOS ? (
-              <SymbolView name="house" tintColor={color} size={24} />
+              <SymbolView name="magnifyingglass" tintColor={color} size={24} />
             ) : (
-              <Feather name="home" size={22} color={color} />
+              <Feather name="search" size={22} color={color} />
             ),
         }}
       />
       <Tabs.Screen
-        name="beats"
+        name="downloads"
         options={{
-          title: "Beats",
+          title: "Downloads",
           tabBarIcon: ({ color }) =>
             isIOS ? (
-              <SymbolView name="music.note" tintColor={color} size={24} />
+              <SymbolView name="arrow.down.circle" tintColor={color} size={24} />
             ) : (
-              <Feather name="music" size={22} color={color} />
-            ),
-        }}
-      />
-      <Tabs.Screen
-        name="recordings"
-        options={{
-          title: "Recordings",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="mic" tintColor={color} size={24} />
-            ) : (
-              <Feather name="mic" size={22} color={color} />
-            ),
-        }}
-      />
-      <Tabs.Screen
-        name="lyrics"
-        options={{
-          title: "Lyrics",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="doc.text" tintColor={color} size={24} />
-            ) : (
-              <Feather name="file-text" size={22} color={color} />
-            ),
-        }}
-      />
-      <Tabs.Screen
-        name="saved"
-        options={{
-          title: "Saved",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="bookmark" tintColor={color} size={24} />
-            ) : (
-              <Feather name="bookmark" size={22} color={color} />
+              <Feather name="download" size={22} color={color} />
             ),
         }}
       />

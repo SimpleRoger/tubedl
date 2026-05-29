@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 
 export type DlStatus = "idle" | "running" | "done" | "error";
+export type DlFormat = "mp4" | "mp3";
 
 export interface DlState {
   status: DlStatus;
@@ -9,6 +10,7 @@ export interface DlState {
   fileId?: string;
   filename?: string;
   error?: string;
+  format?: DlFormat;
 }
 
 const POLL_MS = 1500;
@@ -24,7 +26,6 @@ async function fetchJson<T>(url: string, opts?: RequestInit): Promise<T> {
   return r.json() as Promise<T>;
 }
 
-/** Programmatically trigger a browser file download without a visible button. */
 function triggerBrowserDownload(url: string, filename: string) {
   const a = document.createElement("a");
   a.href = url;
@@ -32,7 +33,6 @@ function triggerBrowserDownload(url: string, filename: string) {
   a.style.display = "none";
   document.body.appendChild(a);
   a.click();
-  // Clean up after a short delay to let the click register
   setTimeout(() => document.body.removeChild(a), 1000);
 }
 
@@ -47,16 +47,17 @@ export function useVideoDownload() {
   const start = useCallback(async (
     videoId: string,
     title: string,
+    format: DlFormat = "mp4",
     startTime?: string,
     endTime?: string,
   ) => {
     stopPoll();
     const isClip = Boolean(startTime || endTime);
     setState({
-      status: "running", pct: 0,
+      status: "running", pct: 0, format,
       message: isClip
         ? `Preparing clip ${startTime ?? "0:00"}–${endTime ?? "end"}…`
-        : "Starting download…",
+        : `Starting ${format.toUpperCase()} download…`,
     });
 
     let jobId: string;
@@ -64,7 +65,7 @@ export function useVideoDownload() {
       const { jobId: id } = await fetchJson<{ jobId: string }>(`${BASE}/api/video-download`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoId, title, startTime, endTime }),
+        body: JSON.stringify({ videoId, title, format, startTime, endTime }),
       });
       jobId = id;
     } catch (e: any) {
@@ -84,8 +85,8 @@ export function useVideoDownload() {
             fileId: data.fileId,
             filename: data.filename,
             error: data.error,
+            format,
           });
-          // Auto-save as soon as the file is ready — no button click required
           if (data.status === "done" && data.fileId && data.filename) {
             const url = `${BASE}/api/video-download/file/${data.fileId}`;
             triggerBrowserDownload(url, data.filename);
@@ -98,6 +99,7 @@ export function useVideoDownload() {
             fileId: data.fileId,
             filename: data.filename,
             error: data.error,
+            format,
           });
         }
       } catch {

@@ -1,513 +1,497 @@
-import { useState, useEffect, useRef } from "react";
-import { Link } from "wouter";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  FolderOpen, Music2, FileText, Mic, Wand2, Bookmark,
-  Sliders, Plus, Loader2, Trash2, CloudUpload, Calendar, Layers,
-  Play, Pause, SkipBack, X, ExternalLink,
+  Search, Download, Scissors, Film, Music2, X, Loader2,
+  AlertCircle, CheckCircle, ExternalLink, Clock, Eye,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { VideoCard } from "../components/video-card";
+import { VideoSkeleton } from "../components/video-skeleton";
+import { formatViews, formatDuration } from "../lib/utils";
+import { useVideoDownload, type DlFormat } from "../hooks/use-video-download";
+import { formatDistanceToNow } from "date-fns";
+import type { Video } from "@workspace/api-client-react";
 
-// ── YouTube IFrame API ─────────────────────────────────────────────────────────
-let _ytLoaded = false, _ytReady = false;
-const _ytCbs: (() => void)[] = [];
-function loadYT(cb: () => void) {
-  if ((window as any).YT?.Player) { cb(); return; }
-  if (_ytReady) { cb(); return; }
-  _ytCbs.push(cb);
-  if (_ytLoaded) return;
-  _ytLoaded = true;
-  const prev = (window as any).onYouTubeIframeAPIReady;
-  (window as any).onYouTubeIframeAPIReady = () => {
-    _ytReady = true;
-    if (typeof prev === "function") prev();
-    _ytCbs.forEach((f) => f()); _ytCbs.length = 0;
-  };
-  if (document.querySelector('script[src*="youtube.com/iframe_api"]')) return;
-  const s = document.createElement("script");
-  s.src = "https://www.youtube.com/iframe_api";
-  document.head.appendChild(s);
-}
-
-const LANE_COLORS = ["#ef4444", "#22c55e", "#8b5cf6"];
-
-function fmtTime(sec: number) {
-  const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
-  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-}
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: "short", day: "numeric", year: "numeric",
-  });
-}
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-type ProjectLane = {
-  id: number;
-  name: string;
-  color: string;
-  muted: boolean;
-  volume: number;
-  startOffset: number;
-  durationSec: number;
-  objectPath: string | null;
-  mime: string;
-};
-
-type SavedProject = {
-  id: number;
-  name: string;
-  beatVideoId: string;
-  beatTitle: string;
-  beatChannelName: string;
-  beatThumbnailUrl: string;
-  lanes: ProjectLane[];
-  createdAt: string;
-  updatedAt: string;
-};
-
-// ── Preview Modal ─────────────────────────────────────────────────────────────
-function ProjectPreviewModal({ project, onClose }: { project: SavedProject; onClose: () => void }) {
-  const ytRef = useRef<any>(null);
-  const audioRefs = useRef<HTMLAudioElement[]>([]);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const baseRef = useRef(0);
-  const timeRef = useRef(0);
-  const schedRefs = useRef<ReturnType<typeof setTimeout>[]>([]);
-
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [ytReady, setYtReady] = useState(false);
-  const [time, setTime] = useState(0);
-
-  const activeLanes = project.lanes.filter((l) => l.objectPath);
+// ── Download Modal ────────────────────────────────────────────────────────────
+function DownloadModal({ video, onClose }: { video: Video; onClose: () => void }) {
+  const [format, setFormat] = useState<DlFormat>("mp4");
+  const [clipMode, setClipMode] = useState(false);
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const { state: dlState, start: startDownload, reset: resetDownload } = useVideoDownload();
 
   useEffect(() => {
-    loadYT(() => {
-      ytRef.current = new (window as any).YT.Player("preview-yt-player", {
-        videoId: project.beatVideoId,
-        playerVars: { autoplay: 0, controls: 0, modestbranding: 1, rel: 0 },
-        events: { onReady: () => setYtReady(true) },
-      });
-    });
-    return () => {
-      stopAll(false);
-      try { ytRef.current?.destroy?.(); } catch {}
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    resetDownload();
+    setClipMode(false);
+    setStartTime("");
+    setEndTime("");
+    setFormat("mp4");
+  }, [video.videoId, resetDownload]);
 
-  // Close on Escape key
   useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  function stopAll(resetTime = true) {
-    schedRefs.current.forEach(clearTimeout);
-    schedRefs.current = [];
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-    try { ytRef.current?.pauseVideo?.(); if (resetTime) ytRef.current?.seekTo?.(0, true); } catch {}
-    audioRefs.current.forEach((a) => { if (a) { a.pause(); if (resetTime) a.currentTime = 0; } });
-    if (resetTime) { setTime(0); timeRef.current = 0; }
-    setIsPlaying(false);
-  }
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
 
-  function handlePlay() {
-    if (isPlaying) return;
-    const t = timeRef.current;
-    try { ytRef.current?.seekTo?.(t, true); ytRef.current?.playVideo?.(); } catch {}
-    activeLanes.forEach((lane, i) => {
-      const delay = Math.max(0, (lane.startOffset ?? 0) - t) * 1000;
-      const audioStart = Math.max(0, t - (lane.startOffset ?? 0));
-      const id = setTimeout(() => {
-        const el = audioRefs.current[i];
-        if (el) {
-          el.currentTime = audioStart;
-          el.volume = lane.muted ? 0 : (lane.volume ?? 80) / 100;
-          el.play().catch(() => {});
-        }
-      }, delay);
-      schedRefs.current.push(id);
-    });
-    baseRef.current = Date.now() - t * 1000;
-    timerRef.current = setInterval(() => {
-      const elapsed = (Date.now() - baseRef.current) / 1000;
-      timeRef.current = elapsed;
-      setTime(elapsed);
-    }, 50);
-    setIsPlaying(true);
-  }
+  const handleDownload = () => {
+    startDownload(
+      video.videoId,
+      video.title,
+      format,
+      clipMode ? startTime || undefined : undefined,
+      clipMode ? endTime || undefined : undefined,
+    );
+  };
 
-  function handlePause() {
-    stopAll(false);
-  }
+  const duration = formatDuration(video.duration);
+  const relativeDate = (() => {
+    try {
+      return formatDistanceToNow(new Date(video.publishedAt), { addSuffix: true });
+    } catch {
+      return video.publishedAt;
+    }
+  })();
 
-  function handleStop() {
-    stopAll(true);
-  }
+  const isIdle = dlState.status === "idle";
+  const isRunning = dlState.status === "running";
+  const isDone = dlState.status === "done";
+  const isError = dlState.status === "error";
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 16 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 16 }}
-        transition={{ type: "spring", stiffness: 400, damping: 32 }}
-        className="bg-[#111] border border-[#2a2a2a] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }}
+        className="absolute inset-0 bg-black/85 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      <motion.div
+        initial={{ scale: 0.96, opacity: 0, y: 10 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.96, opacity: 0, y: 10 }}
+        transition={{ type: "spring", damping: 28, stiffness: 320 }}
+        className="relative z-10 w-full max-w-5xl max-h-[92vh] flex flex-col lg:flex-row bg-surface border border-border rounded-2xl overflow-hidden shadow-[0_32px_80px_-16px_rgba(0,0,0,0.7)]"
       >
-        {/* Hidden YT player - replaced by iframe by the API */}
-        <div
-          id="preview-yt-player"
-          style={{ width: 1, height: 1, position: "absolute", top: -9999, left: -9999, opacity: 0, pointerEvents: "none" }}
-        />
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 z-20 p-1.5 rounded-full bg-black/50 text-white/70 hover:text-white hover:bg-black/80 transition-colors backdrop-blur-sm"
+        >
+          <X className="w-5 h-5" />
+        </button>
 
-        {/* Preloaded audio elements */}
-        {activeLanes.map((lane, i) => (
-          <audio
-            key={lane.id}
-            ref={(el) => { if (el) audioRefs.current[i] = el; }}
-            src={`/api/storage${lane.objectPath}`}
-            preload="auto"
-          />
-        ))}
+        {/* ── Left: Video Player ── */}
+        <div className="flex flex-col w-full lg:w-[58%] shrink-0 lg:border-r border-border overflow-y-auto">
+          <div className="relative w-full aspect-video bg-black shrink-0">
+            <iframe
+              src={`https://www.youtube.com/embed/${video.videoId}?autoplay=1&rel=0`}
+              title={video.title}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              className="absolute inset-0 w-full h-full"
+            />
+          </div>
 
-        {/* Thumbnail header */}
-        <div className="relative">
-          <img
-            src={project.beatThumbnailUrl}
-            alt={project.name}
-            className="w-full aspect-video object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+          <div className="p-4 space-y-2">
+            <h2 className="text-text-main font-bold text-base leading-snug">{video.title}</h2>
+            <div className="flex items-center gap-2 flex-wrap text-xs text-text-muted">
+              <span className="font-semibold text-text-main/80">{video.channelName}</span>
+              {video.viewCount && (
+                <>
+                  <span>·</span>
+                  <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{formatViews(video.viewCount)}</span>
+                </>
+              )}
+              {duration && (
+                <>
+                  <span>·</span>
+                  <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{duration}</span>
+                </>
+              )}
+              <span>·</span>
+              <span>{relativeDate}</span>
+            </div>
+            <a
+              href={`https://youtube.com/watch?v=${video.videoId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors"
+            >
+              <ExternalLink className="w-3 h-3" />
+              Open on YouTube
+            </a>
+          </div>
+        </div>
 
-          {/* Close */}
-          <button
-            onClick={onClose}
-            className="absolute top-3 right-3 p-1.5 rounded-full bg-black/60 hover:bg-black/90 text-gray-400 hover:text-white transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
+        {/* ── Right: Download Panel ── */}
+        <div className="flex flex-col w-full lg:w-[42%] p-5 gap-5 overflow-y-auto">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+              <Download className="w-3.5 h-3.5 text-primary" />
+            </div>
+            <h3 className="font-bold text-text-main text-sm">Download</h3>
+          </div>
 
-          {/* Giant play/pause button overlaid on thumbnail */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            {isPlaying ? (
+          {/* Format picker */}
+          <div className="space-y-2">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-text-muted">Format</p>
+            <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={handlePause}
-                className="p-4 rounded-full bg-black/50 hover:bg-black/70 text-white transition-all backdrop-blur-sm border border-white/10"
+                onClick={() => setFormat("mp4")}
+                className={`flex items-center gap-2 px-3 py-3 rounded-xl border text-sm font-semibold transition-all ${
+                  format === "mp4"
+                    ? "bg-primary/10 border-primary/40 text-primary"
+                    : "bg-background border-border text-text-muted hover:border-border-hover hover:text-text-main"
+                }`}
               >
-                <Pause className="w-8 h-8" />
+                <Film className="w-4 h-4 shrink-0" />
+                <span>MP4 Video</span>
               </button>
-            ) : (
               <button
-                onClick={handlePlay}
-                disabled={!ytReady}
-                className="p-4 rounded-full bg-black/50 hover:bg-black/70 text-white transition-all backdrop-blur-sm border border-white/10 disabled:opacity-40"
+                onClick={() => setFormat("mp3")}
+                className={`flex items-center gap-2 px-3 py-3 rounded-xl border text-sm font-semibold transition-all ${
+                  format === "mp3"
+                    ? "bg-primary/10 border-primary/40 text-primary"
+                    : "bg-background border-border text-text-muted hover:border-border-hover hover:text-text-main"
+                }`}
               >
-                {ytReady
-                  ? <Play className="w-8 h-8" fill="currentColor" style={{ transform: "translateX(2px)" }} />
-                  : <Loader2 className="w-8 h-8 animate-spin" />
-                }
+                <Music2 className="w-4 h-4 shrink-0" />
+                <span>MP3 Audio</span>
               </button>
+            </div>
+            {format === "mp4" && (
+              <p className="text-xs text-text-muted">Best quality up to 1080p, merged MP4.</p>
+            )}
+            {format === "mp3" && (
+              <p className="text-xs text-text-muted">Highest quality audio extracted as MP3.</p>
             )}
           </div>
 
-          {/* Title overlay */}
-          <div className="absolute bottom-0 left-0 right-0 p-4">
-            <p className="font-bold text-white text-sm leading-tight truncate mb-0.5">{project.name}</p>
-            <p className="text-gray-400 text-xs truncate">{project.beatChannelName}</p>
-          </div>
-        </div>
+          {/* Clip toggle */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-text-muted flex items-center gap-1.5">
+                <Scissors className="w-3.5 h-3.5" />Clip (optional)
+              </p>
+              <button
+                onClick={() => {
+                  setClipMode((p) => !p);
+                  setStartTime("");
+                  setEndTime("");
+                }}
+                className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all ${
+                  clipMode
+                    ? "bg-primary/10 border-primary/30 text-primary"
+                    : "border-border text-text-muted hover:border-border-hover hover:text-text-main"
+                }`}
+              >
+                {clipMode ? "On" : "Off"}
+              </button>
+            </div>
 
-        {/* Controls bar */}
-        <div className="px-4 pt-3 pb-1 flex items-center gap-2 border-b border-[#1e1e1e]">
-          <button
-            onClick={handleStop}
-            className="p-1.5 rounded-lg hover:bg-white/10 text-gray-600 hover:text-white transition-colors"
-            title="Stop & rewind"
-          >
-            <SkipBack className="w-3.5 h-3.5" />
-          </button>
-          <span className="font-mono text-sm text-gray-400 tabular-nums">{fmtTime(time)}</span>
-          <div className="flex-1" />
-          <Link href={`/daw?project=${project.id}`}>
-            <span
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#2a2a2a] hover:border-primary/40 text-xs text-gray-500 hover:text-white transition-colors cursor-pointer"
-              onClick={onClose}
-            >
-              <ExternalLink className="w-3 h-3" />
-              Open in DAW
-            </span>
-          </Link>
-        </div>
-
-        {/* Lane progress bars */}
-        <div className="p-4">
-          {activeLanes.length > 0 ? (
-            <div className="space-y-3">
-              {activeLanes.map((lane, i) => {
-                const laneStart = lane.startOffset ?? 0;
-                const laneDur = lane.durationSec ?? 0;
-                const laneActive = isPlaying && time >= laneStart;
-                const progress = laneDur > 0
-                  ? Math.min(1, Math.max(0, (time - laneStart) / laneDur))
-                  : 0;
-                const laneColor = lane.color || LANE_COLORS[lane.id % 3];
-
-                return (
-                  <div key={lane.id} className="flex items-center gap-2.5">
-                    <div
-                      className="w-2 h-2 rounded-full shrink-0 transition-opacity"
-                      style={{ backgroundColor: laneColor, opacity: laneActive ? 1 : 0.3 }}
-                    />
-                    <span className="text-[11px] text-gray-500 w-16 shrink-0 truncate">{lane.name}</span>
-                    <div className="flex-1 h-1.5 bg-[#222] rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          backgroundColor: laneColor,
-                          width: `${progress * 100}%`,
-                          opacity: laneActive ? 0.8 : 0,
-                          transition: laneActive ? "width 0.05s linear" : "none",
-                        }}
+            <AnimatePresence initial={false}>
+              {clipMode && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="overflow-hidden"
+                >
+                  <div className="flex items-center gap-2 pt-1">
+                    <div className="flex-1 space-y-1">
+                      <label className="text-[10px] text-text-muted uppercase tracking-widest font-semibold">Start</label>
+                      <input
+                        value={startTime}
+                        onChange={(e) => setStartTime(e.target.value)}
+                        placeholder="e.g. 1:02"
+                        className="w-full h-9 px-3 bg-background border border-border rounded-lg text-text-main text-sm focus:outline-none focus:border-primary/50 transition-colors font-mono"
                       />
                     </div>
-                    <span className="text-[10px] text-gray-700 shrink-0 tabular-nums w-7 text-right">
-                      {Math.round(laneDur)}s
-                    </span>
+                    <span className="text-text-muted mt-5 shrink-0">→</span>
+                    <div className="flex-1 space-y-1">
+                      <label className="text-[10px] text-text-muted uppercase tracking-widest font-semibold">End</label>
+                      <input
+                        value={endTime}
+                        onChange={(e) => setEndTime(e.target.value)}
+                        placeholder="e.g. 3:45"
+                        className="w-full h-9 px-3 bg-background border border-border rounded-lg text-text-main text-sm focus:outline-none focus:border-primary/50 transition-colors font-mono"
+                      />
+                    </div>
                   </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="flex items-center justify-center gap-2 py-2 text-gray-700 text-xs">
-              <Mic className="w-3.5 h-3.5" />
-              Beat only — no vocals recorded yet
-            </div>
-          )}
+                  <p className="text-xs text-text-muted mt-2">Leave blank to download the full video.</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Download button + status */}
+          <div className="space-y-3 mt-auto">
+            {isIdle && (
+              <button
+                onClick={handleDownload}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold text-sm transition-all shadow-lg shadow-primary/20 active:scale-[0.98]"
+              >
+                <Download className="w-4 h-4" />
+                {clipMode && (startTime || endTime)
+                  ? `Download Clip · ${format.toUpperCase()}`
+                  : `Download · ${format.toUpperCase()}`}
+              </button>
+            )}
+
+            {isRunning && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-1.5 text-amber-400 font-medium">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    {dlState.message}
+                  </span>
+                  <span className="text-text-muted tabular-nums">{dlState.pct}%</span>
+                </div>
+                <div className="w-full h-1.5 bg-surface-hover rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-amber-400 rounded-full"
+                    animate={{ width: `${dlState.pct}%` }}
+                    transition={{ duration: 0.5 }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {isDone && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 py-3 px-4 rounded-xl bg-green-500/10 border border-green-500/20">
+                  <CheckCircle className="w-4 h-4 text-green-400 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-green-400">Download started</p>
+                    <p className="text-xs text-text-muted truncate">{dlState.filename}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { resetDownload(); }}
+                  className="w-full py-2.5 rounded-xl border border-border text-text-muted hover:text-text-main hover:border-border-hover text-sm font-medium transition-colors"
+                >
+                  Download another format
+                </button>
+              </div>
+            )}
+
+            {isError && (
+              <div className="space-y-3">
+                <div className="flex items-start gap-2 py-3 px-4 rounded-xl bg-red-500/10 border border-red-500/20">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-red-400">Download failed</p>
+                    <p className="text-xs text-text-muted mt-0.5 leading-relaxed">{dlState.error}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => resetDownload()}
+                  className="w-full py-2.5 rounded-xl border border-border text-text-muted hover:text-text-main hover:border-border-hover text-sm font-medium transition-colors"
+                >
+                  Try again
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </motion.div>
-    </motion.div>
+    </div>
   );
 }
 
-// ── Home Page ─────────────────────────────────────────────────────────────────
+// ── Home Page ────────────────────────────────────────────────────────────────
 export default function Home() {
-  const [projects, setProjects] = useState<SavedProject[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [previewProject, setPreviewProject] = useState<SavedProject | null>(null);
+  const [query, setQuery] = useState("");
+  const [inputValue, setInputValue] = useState("");
+  const [results, setResults] = useState<Video[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    fetch("/api/daw/projects")
-      .then((r) => r.json())
-      .then(setProjects)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+  const handleSearch = useCallback(async (q: string) => {
+    const trimmed = q.trim();
+    if (!trimmed) return;
+    setQuery(trimmed);
+    setIsSearching(true);
+    setSearchError(null);
+    setHasSearched(true);
+    setResults([]);
+    try {
+      const resp = await fetch(`/api/videos/search?q=${encodeURIComponent(trimmed)}&maxResults=24`);
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error((data as any).error ?? `Search failed (${resp.status})`);
+      }
+      const data = await resp.json();
+      setResults(data);
+    } catch (err: any) {
+      setSearchError(err.message ?? "Search failed");
+    } finally {
+      setIsSearching(false);
+    }
   }, []);
 
-  async function handleDelete(id: number) {
-    setDeletingId(id);
-    try {
-      await fetch(`/api/daw/projects/${id}`, { method: "DELETE" });
-      setProjects((p) => p.filter((proj) => proj.id !== id));
-      if (previewProject?.id === id) setPreviewProject(null);
-    } catch { /* ignore */ }
-    setDeletingId(null);
-  }
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleSearch(inputValue);
+  };
+
+  // Focus search on mount
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const skeletons = Array.from({ length: 8 });
 
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans">
-      {/* Topbar */}
-      <header className="h-16 border-b border-border glass-panel sticky top-0 z-40 flex items-center justify-between px-4 sm:px-6 gap-3">
-        <div className="flex items-center gap-4 min-w-0">
+      {/* Header */}
+      <header className="sticky top-0 z-40 border-b border-border glass-panel">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-16 flex items-center gap-4">
+          {/* Logo */}
           <div className="flex items-center gap-3 shrink-0">
             <img
               src={`${import.meta.env.BASE_URL}images/logo.png`}
-              className="w-9 h-9 rounded-xl shadow-lg"
+              className="w-8 h-8 rounded-xl shadow"
               alt="Logo"
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
-            <h1 className="font-display font-bold text-xl sm:text-2xl tracking-tight text-white flex items-center">
-              Tube<span className="text-primary ml-0.5">Feed</span>
-            </h1>
+            <span className="font-display font-bold text-xl tracking-tight text-white hidden sm:block">
+              Tube<span className="text-primary">DL</span>
+            </span>
           </div>
 
-          <nav className="flex items-center gap-1 bg-surface/60 border border-border rounded-xl px-1.5 py-1">
-            <span className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-semibold bg-primary/15 text-primary border border-primary/20">
-              <FolderOpen className="w-3.5 h-3.5" />Projects
-            </span>
-            <Link href="/beats">
-              <span className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-medium text-text-muted hover:text-text-main hover:bg-surface-hover transition-colors cursor-pointer">
-                <Music2 className="w-3.5 h-3.5" />Beats
-              </span>
-            </Link>
-            <Link href="/daw">
-              <span className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-medium text-text-muted hover:text-text-main hover:bg-surface-hover transition-colors cursor-pointer">
-                <Sliders className="w-3.5 h-3.5" />DAW
-              </span>
-            </Link>
-            <Link href="/lyrics">
-              <span className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-medium text-text-muted hover:text-text-main hover:bg-surface-hover transition-colors cursor-pointer">
-                <FileText className="w-3.5 h-3.5" />Lyrics
-              </span>
-            </Link>
-            <Link href="/recordings">
-              <span className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-medium text-text-muted hover:text-text-main hover:bg-surface-hover transition-colors cursor-pointer">
-                <Mic className="w-3.5 h-3.5" />Recordings
-              </span>
-            </Link>
-            <Link href="/extractor">
-              <span className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-medium text-text-muted hover:text-text-main hover:bg-surface-hover transition-colors cursor-pointer">
-                <Wand2 className="w-3.5 h-3.5" />Extractor
-              </span>
-            </Link>
-            <Link href="/saved">
-              <span className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-medium text-text-muted hover:text-text-main hover:bg-surface-hover transition-colors cursor-pointer">
-                <Bookmark className="w-3.5 h-3.5" />Saved
-              </span>
-            </Link>
-          </nav>
+          {/* Search bar */}
+          <form onSubmit={handleSubmit} className="flex-1 flex items-center gap-2 max-w-2xl">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none" />
+              <input
+                ref={inputRef}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                placeholder="Search YouTube videos…"
+                className="w-full h-10 pl-9 pr-4 bg-background border border-border rounded-xl text-text-main text-sm placeholder:text-text-muted focus:outline-none focus:border-primary/50 transition-colors"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={!inputValue.trim() || isSearching}
+              className="h-10 px-5 bg-primary hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-all shrink-0"
+            >
+              {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : "Search"}
+            </button>
+          </form>
         </div>
-
-        <Link href="/beats">
-          <span className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg font-medium text-sm transition-all shadow-[0_0_15px_rgba(255,0,0,0.3)] hover:shadow-[0_0_20px_rgba(255,0,0,0.5)] cursor-pointer">
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">New Project</span>
-          </span>
-        </Link>
       </header>
 
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1800px] w-full mx-auto">
-        <div className="mb-8 flex items-center justify-between">
-          <h2 className="text-2xl font-display font-bold text-text-main flex items-center gap-3">
-            <FolderOpen className="w-6 h-6 text-primary" />
-            DAW Projects
-          </h2>
-          {projects.length > 0 && (
-            <span className="text-sm text-text-muted">{projects.length} project{projects.length !== 1 ? "s" : ""}</span>
-          )}
-        </div>
+      {/* Main content */}
+      <main className="flex-1 max-w-[1400px] w-full mx-auto px-4 sm:px-6 py-8">
 
-        {loading ? (
-          <div className="flex items-center justify-center h-64 gap-3 text-text-muted">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            <span>Loading projects…</span>
-          </div>
-        ) : projects.length === 0 ? (
+        {/* Empty / hero state */}
+        {!hasSearched && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex flex-col items-center justify-center py-24 text-center px-4"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="flex flex-col items-center justify-center py-24 text-center"
           >
-            <div className="w-24 h-24 bg-surface rounded-full flex items-center justify-center mb-6 shadow-2xl border border-border">
-              <CloudUpload className="w-12 h-12 text-border-hover" />
+            <div className="w-20 h-20 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-6 shadow-2xl">
+              <Download className="w-9 h-9 text-primary" />
             </div>
-            <h2 className="text-3xl font-display font-bold text-text-main mb-3">No projects yet</h2>
-            <p className="text-text-muted max-w-md mb-8 text-lg">
-              Pick a beat, record your vocals in the DAW, and save your project — it'll show up here.
+            <h1 className="text-4xl font-display font-bold text-text-main mb-3 tracking-tight">
+              Search. Download. Clip.
+            </h1>
+            <p className="text-text-muted max-w-md text-lg leading-relaxed">
+              Find any YouTube video, then download it as MP4 or MP3 — or clip a specific segment.
             </p>
-            <Link href="/beats">
-              <span className="inline-flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5 cursor-pointer">
-                <Music2 className="w-5 h-5" />
-                Browse Beats
-              </span>
-            </Link>
+            <div className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-xl w-full">
+              {[
+                { icon: <Search className="w-5 h-5" />, label: "Search", desc: "Find any video by title, channel, or topic" },
+                { icon: <Download className="w-5 h-5" />, label: "Download", desc: "Save as MP4 video or MP3 audio" },
+                { icon: <Scissors className="w-5 h-5" />, label: "Clip", desc: "Trim to just the part you want" },
+              ].map((item) => (
+                <div key={item.label} className="bg-surface border border-border rounded-xl p-4 text-left">
+                  <div className="text-primary mb-2">{item.icon}</div>
+                  <p className="font-semibold text-text-main text-sm mb-1">{item.label}</p>
+                  <p className="text-xs text-text-muted leading-relaxed">{item.desc}</p>
+                </div>
+              ))}
+            </div>
           </motion.div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
-            {projects.map((proj, index) => {
-              const recordedCount = proj.lanes.filter((l) => l.objectPath).length;
-              return (
-                <motion.div
-                  key={proj.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, delay: Math.min(index * 0.05, 0.4), ease: "easeOut" }}
-                  className="group bg-surface border border-border rounded-2xl overflow-hidden hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 transition-all"
-                >
-                  {/* Thumbnail — click to preview */}
-                  <button
-                    className="relative w-full aspect-video bg-background overflow-hidden block"
-                    onClick={() => setPreviewProject(proj)}
-                  >
-                    <img
-                      src={proj.beatThumbnailUrl}
-                      alt={proj.beatTitle}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+        )}
 
-                    {/* Play overlay on hover */}
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="p-3 rounded-full bg-black/60 backdrop-blur-sm border border-white/20">
-                        <Play className="w-6 h-6 text-white" fill="currentColor" style={{ transform: "translateX(1px)" }} />
-                      </div>
-                    </div>
-
-                    {recordedCount > 0 && (
-                      <div className="absolute bottom-2 right-2 flex items-center gap-1 bg-black/70 text-white text-xs font-bold px-2 py-1 rounded-lg backdrop-blur-sm">
-                        <Layers className="w-3 h-3 text-primary" />
-                        {recordedCount} track{recordedCount !== 1 ? "s" : ""}
-                      </div>
-                    )}
-                  </button>
-
-                  {/* Info */}
-                  <div className="p-4">
-                    <p className="font-bold text-text-main text-sm truncate mb-0.5">{proj.name}</p>
-                    <p className="text-xs text-text-muted truncate mb-1">{proj.beatChannelName}</p>
-                    <div className="flex items-center gap-1 text-[11px] text-text-muted/60 mb-4">
-                      <Calendar className="w-3 h-3" />
-                      {fmtDate(proj.updatedAt ?? proj.createdAt)}
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setPreviewProject(proj)}
-                        className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-surface-hover hover:bg-border text-text-muted hover:text-white text-xs font-medium transition-colors border border-border"
-                        title="Preview"
-                      >
-                        <Play className="w-3.5 h-3.5" fill="currentColor" />
-                        Play
-                      </button>
-                      <Link href={`/daw?project=${proj.id}`} className="flex-1">
-                        <span className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold transition-colors cursor-pointer">
-                          <FolderOpen className="w-3.5 h-3.5" />
-                          Open
-                        </span>
-                      </Link>
-                      <button
-                        onClick={() => handleDelete(proj.id)}
-                        disabled={deletingId === proj.id}
-                        className="w-9 flex items-center justify-center rounded-xl border border-border hover:bg-red-900/30 hover:border-red-600/40 text-text-muted hover:text-red-400 disabled:opacity-50 transition-colors"
-                        title="Delete project"
-                      >
-                        {deletingId === proj.id
-                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          : <Trash2 className="w-3.5 h-3.5" />}
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
+        {/* Search error */}
+        {searchError && !isSearching && (
+          <div className="flex items-center gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20 mb-6">
+            <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+            <p className="text-sm text-red-400">{searchError}</p>
           </div>
+        )}
+
+        {/* Loading skeletons */}
+        {isSearching && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {skeletons.map((_, i) => (
+              <VideoSkeleton key={i} />
+            ))}
+          </div>
+        )}
+
+        {/* Results */}
+        {!isSearching && hasSearched && results.length === 0 && !searchError && (
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <Search className="w-10 h-10 text-border-hover mb-4" />
+            <p className="text-lg font-semibold text-text-main mb-2">No results for "{query}"</p>
+            <p className="text-text-muted text-sm">Try a different search term.</p>
+          </div>
+        )}
+
+        {!isSearching && results.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <p className="text-sm text-text-muted">
+                <span className="text-text-main font-semibold">{results.length}</span> results for
+                {" "}<span className="text-primary">"{query}"</span>
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {results.map((video, i) => (
+                <motion.div
+                  key={video.videoId}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: Math.min(i * 0.04, 0.5) }}
+                >
+                  <VideoCard video={video} onClick={setSelectedVideo} />
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
         )}
       </main>
 
-      {/* Preview Modal */}
+      {/* Download modal */}
       <AnimatePresence>
-        {previewProject && (
-          <ProjectPreviewModal
-            project={previewProject}
-            onClose={() => setPreviewProject(null)}
+        {selectedVideo && (
+          <DownloadModal
+            key={selectedVideo.videoId}
+            video={selectedVideo}
+            onClose={() => setSelectedVideo(null)}
           />
         )}
       </AnimatePresence>

@@ -14,14 +14,14 @@ interface DlJob {
   status: "running" | "done" | "error";
   pct: number;
   message: string;
-  fileId?: string;   // UUID → maps to a temp file path
-  filename?: string; // e.g. "Song Title [1080p].mp4"
+  fileId?: string;
+  filename?: string;
   error?: string;
   startedAt: number;
+  format: "mp4" | "mp3";
 }
 
 const jobs = new Map<string, DlJob>();
-// Map fileId → absolute path to temp file
 const files = new Map<string, string>();
 
 // Auto-expire jobs + temp files after 60 minutes
@@ -39,17 +39,7 @@ setInterval(() => {
   }
 }, 10 * 60 * 1000);
 
-// ── Quality selection ────────────────────────────────────────────────────────
-// Priority (high → low):
-//  1. Best ≤1080p video + any best audio — ffmpeg merges into mp4 container.
-//     No codec restriction so yt-dlp always picks the highest-res stream.
-//  2. Best ≤1080p video + m4a (AAC) — slightly narrower fallback.
-//  3. Best uncapped video + any audio — no height limit, still DASH.
-//  4. Any single combined stream — last resort (usually 360p progressive).
-//
-// --merge-output-format mp4 + ffmpeg handle any audio codec, so we don't
-// need to restrict to m4a here. Restricting to [ext=m4a] was the root cause
-// of falling through to the low-quality combined stream.
+// ── Quality / format selection ───────────────────────────────────────────────
 const FORMAT_1080 = [
   "bestvideo[height<=1080]+bestaudio",
   "bestvideo[height<=1080]+bestaudio[ext=m4a]",
@@ -76,15 +66,13 @@ function getProxyList(): Array<string | null> {
     .map((p) => p.trim())
     .filter(Boolean);
 
-  // Shuffle for load distribution
   for (let i = proxies.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [proxies[i], proxies[j]] = [proxies[j], proxies[i]];
   }
 
-  // Deduplicate and cap at 3 proxy attempts, then always try direct last
   const unique = [...new Set(proxies)].slice(0, 3);
-  return [...unique, null]; // null = no proxy (direct connection)
+  return [...unique, null];
 }
 
 // ── Download worker ──────────────────────────────────────────────────────────
@@ -94,6 +82,7 @@ async function spawnDownload(
   outTemplate: string,
   url: string,
   sectionArgs: string[],
+  formatArgs: string[],
   onProgress: (pct: number, merging: boolean) => void,
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
@@ -104,8 +93,7 @@ async function spawnDownload(
       "--impersonate", "chrome",
       ...extraArgs,
       ...ffmpegArgs(),
-      "--format", FORMAT_1080,
-      "--merge-output-format", "mp4",
+      ...formatArgs,
       "--output", outTemplate,
       "--progress",
       "--newline",
@@ -121,7 +109,7 @@ async function spawnDownload(
       const m = text.match(/\[download\]\s+([\d.]+)%/);
       if (m) {
         onProgress(Math.round(parseFloat(m[1])), false);
-      } else if (text.includes("[Merger]") || text.includes("[ffmpeg]")) {
+      } else if (text.includes("[Merger]") || text.includes("[ffmpeg]") || text.includes("[ExtractAudio]")) {
         onProgress(97, true);
       }
     };
@@ -147,6 +135,7 @@ async function runDownload(
   jobId: string,
   videoId: string,
   title: string,
+  format: "mp4" | "mp3",
   startTime?: string,
   endTime?: string,
 ) {
@@ -161,6 +150,13 @@ async function runDownload(
     sectionArgs.push("--download-sections", `*${start}-${end}`);
     sectionArgs.push("--force-keyframes-at-cuts");
   }
+
+  // Build format-specific yt-dlp args
+  const isMp3 = format === "mp3";
+  const formatArgs = isMp3
+    ? ["-x", "--audio-format", "mp3", "--audio-quality", "0"]
+    : ["--format", FORMAT_1080, "--merge-output-format", "mp4"];
+  const ext = isMp3 ? "mp3" : "mp4";
 
   const proxyList = getProxyList();
   let lastErr: Error | null = null;
@@ -178,7 +174,9 @@ async function runDownload(
     }
 
     const extraArgs = proxy ? ["--proxy", proxy] : [];
-    const outTemplate = path.join(tmpDir, "%(title)s [%(height)sp].%(ext)s");
+    const outTemplate = isMp3
+      ? path.join(tmpDir, "%(title)s.%(ext)s")
+      : path.join(tmpDir, "%(title)s [%(height)sp].%(ext)s");
 
     try {
       await spawnDownload(
@@ -187,10 +185,11 @@ async function runDownload(
         outTemplate,
         url,
         sectionArgs,
+        formatArgs,
         (pct, merging) => {
           if (merging) {
             job.pct = 97;
-            job.message = "Merging audio + video…";
+            job.message = isMp3 ? "Converting to MP3…" : "Merging audio + video…";
           } else {
             job.pct = Math.min(pct, 95);
             job.message = `Downloading… ${pct}%`;
@@ -198,8 +197,7 @@ async function runDownload(
         },
       );
 
-      // Success — find the output file
-      const outFiles = fs.readdirSync(tmpDir).filter((f) => f.endsWith(".mp4"));
+      const outFiles = fs.readdirSync(tmpDir).filter((f) => f.endsWith(`.${ext}`));
       if (!outFiles.length) {
         try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
         throw new Error("Download produced no output file");
@@ -218,48 +216,48 @@ async function runDownload(
     } catch (err: any) {
       try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
       lastErr = err;
-      const retryable = err.retryable !== false; // default retryable unless explicitly false
-      logger.warn({ videoId, attempt, proxy: proxy ?? "direct", err: err.message }, "download attempt failed");
+      const retryable = err.retryable !== false;
+      logger.warn({ videoId, format, attempt, proxy: proxy ?? "direct", err: err.message }, "download attempt failed");
 
-      if (!retryable && !isLastAttempt) continue; // non-retryable — still try others
+      if (!retryable && !isLastAttempt) continue;
       if (isLastAttempt) break;
     }
   }
 
-  logger.error({ videoId, err: lastErr }, "video download failed after all attempts");
+  logger.error({ videoId, format, err: lastErr }, "video download failed after all attempts");
   job.status = "error";
   job.error = lastErr?.message ?? "Download failed";
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────────
 
-// Start a download job
 router.post("/video-download", async (req: Request, res: Response): Promise<void> => {
-  const { videoId, title, startTime, endTime } = req.body ?? {};
+  const { videoId, title, format, startTime, endTime } = req.body ?? {};
   if (!videoId || typeof videoId !== "string") {
     res.status(400).json({ error: "videoId is required" });
     return;
   }
 
-  const jobId = randomUUID();
+  const dlFormat: "mp4" | "mp3" = format === "mp3" ? "mp3" : "mp4";
   const isClip = Boolean(startTime || endTime);
+
+  const jobId = randomUUID();
   const job: DlJob = {
     status: "running",
     pct: 0,
+    format: dlFormat,
     message: isClip
       ? `Preparing clip ${startTime ?? "0:00"}–${endTime ?? "end"}…`
-      : "Starting download…",
+      : `Starting ${dlFormat.toUpperCase()} download…`,
     startedAt: Date.now(),
   };
   jobs.set(jobId, job);
 
-  // Fire-and-forget
-  runDownload(jobId, videoId, title ?? videoId, startTime, endTime).catch(() => {});
+  runDownload(jobId, videoId, title ?? videoId, dlFormat, startTime, endTime).catch(() => {});
 
   res.json({ jobId });
 });
 
-// Poll job status
 router.get("/video-download/job/:jobId", (req: Request, res: Response): void => {
   const job = jobs.get(req.params.jobId);
   if (!job) { res.status(404).json({ error: "Job not found" }); return; }
@@ -270,10 +268,10 @@ router.get("/video-download/job/:jobId", (req: Request, res: Response): void => 
     fileId: job.fileId,
     filename: job.filename,
     error: job.error,
+    format: job.format,
   });
 });
 
-// Serve the completed download file
 router.get("/video-download/file/:fileId", (req: Request, res: Response): void => {
   const filePath = files.get(req.params.fileId);
   if (!filePath || !fs.existsSync(filePath)) {
@@ -283,8 +281,9 @@ router.get("/video-download/file/:fileId", (req: Request, res: Response): void =
 
   const stat = fs.statSync(filePath);
   const filename = path.basename(filePath);
+  const isMp3 = filename.endsWith(".mp3");
 
-  res.setHeader("Content-Type", "video/mp4");
+  res.setHeader("Content-Type", isMp3 ? "audio/mpeg" : "video/mp4");
   res.setHeader("Content-Length", stat.size);
   res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(filename)}"`);
   res.setHeader("Accept-Ranges", "bytes");

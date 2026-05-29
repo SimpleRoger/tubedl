@@ -1,226 +1,148 @@
 import { Feather } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
-import React, { useState } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Platform,
-  RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AddChannelModal } from "@/components/AddChannelModal";
-import { EmptyState } from "@/components/EmptyState";
 import { VideoCard } from "@/components/VideoCard";
 import { VideoPlayerModal } from "@/components/VideoPlayerModal";
 import type { Video } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
-import {
-  getListChannelsQueryKey,
-  getListVideosQueryKey,
-  useListChannels,
-  useListVideos,
-  useRemoveChannel,
-  type Channel,
-} from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
 
-export default function FeedScreen() {
+const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
+
+async function searchVideos(q: string): Promise<Video[]> {
+  const resp = await fetch(`${BASE_URL}/api/videos/search?q=${encodeURIComponent(q)}&maxResults=20`);
+  if (!resp.ok) {
+    const data = await resp.json().catch(() => ({}));
+    throw new Error((data as any).error ?? `Search failed (${resp.status})`);
+  }
+  return resp.json();
+}
+
+export default function SearchScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const queryClient = useQueryClient();
-  const [selectedChannelId, setSelectedChannelId] = useState<number | null>(null);
-  const [addModalVisible, setAddModalVisible] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [managingChannels, setManagingChannels] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Video[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
   const [playerVideo, setPlayerVideo] = useState<Video | null>(null);
-  const [order, setOrder] = useState<"recent" | "popular">("recent");
+  const inputRef = useRef<TextInput>(null);
 
-  const { data: channels = [] } = useListChannels();
-  const { data: videos = [], isLoading, refetch } = useListVideos({
-    channelId: selectedChannelId ?? undefined,
-    order,
-  });
+  const handleSearch = useCallback(async () => {
+    const q = query.trim();
+    if (!q) return;
+    setIsSearching(true);
+    setSearchError(null);
+    setHasSearched(true);
+    setResults([]);
+    try {
+      const data = await searchVideos(q);
+      setResults(data);
+    } catch (err: any) {
+      setSearchError(err.message ?? "Search failed");
+    } finally {
+      setIsSearching(false);
+    }
+  }, [query]);
 
-  const removeChannel = useRemoveChannel({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListChannelsQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getListVideosQueryKey() });
-        setSelectedChannelId(null);
-      },
-    },
-  });
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await refetch();
-    setRefreshing(false);
-  };
-
-  const handleChannelSelect = (id: number | null) => {
-    Haptics.selectionAsync();
-    setSelectedChannelId(id);
-  };
-
-  const handleRemoveChannel = (ch: Channel) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    removeChannel.mutate({ id: ch.id });
-  };
-
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
-  const bottomPad = Platform.OS === "web" ? 34 : 0;
-
-  const headerHeight = topPad + 52;
+  const topPad = Platform.OS === "web" ? 16 : insets.top;
+  const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Header */}
       <View style={[styles.header, { paddingTop: topPad, backgroundColor: colors.background }]}>
         <Text style={[styles.logo, { color: colors.foreground }]}>
-          <Text style={{ color: colors.primary }}>Tube</Text>Feed
+          Tube<Text style={{ color: colors.primary }}>DL</Text>
         </Text>
-        <View style={styles.headerActions}>
-          {channels.length > 0 && (
-            <>
-              <View style={[styles.orderToggle, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-                <TouchableOpacity
-                  style={[styles.orderBtn, order === "recent" && { backgroundColor: colors.primary }]}
-                  onPress={() => setOrder("recent")}
-                >
-                  <Text style={[styles.orderBtnText, { color: order === "recent" ? "#fff" : colors.mutedForeground }]}>
-                    Recent
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.orderBtn, order === "popular" && { backgroundColor: colors.primary }]}
-                  onPress={() => setOrder("popular")}
-                >
-                  <Text style={[styles.orderBtnText, { color: order === "popular" ? "#fff" : colors.mutedForeground }]}>
-                    Popular
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity
-                style={styles.headerBtn}
-                onPress={() => setManagingChannels((v) => !v)}
-              >
-                <Feather name={managingChannels ? "check" : "settings"} size={20} color={colors.mutedForeground} />
-              </TouchableOpacity>
-            </>
-          )}
-          <TouchableOpacity
-            style={[styles.addBtn, { backgroundColor: colors.primary }]}
-            onPress={() => setAddModalVisible(true)}
-          >
-            <Feather name="plus" size={18} color="#fff" />
-          </TouchableOpacity>
-        </View>
       </View>
 
-      {channels.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={[styles.chips, { borderBottomColor: colors.border }]}
-          contentContainerStyle={styles.chipsContent}
-        >
-          <TouchableOpacity
-            style={[
-              styles.chip,
-              selectedChannelId === null && { backgroundColor: colors.primary },
-              selectedChannelId !== null && { backgroundColor: colors.muted, borderColor: colors.border, borderWidth: 1 },
-            ]}
-            onPress={() => handleChannelSelect(null)}
-          >
-            <Text
-              style={[
-                styles.chipText,
-                { color: selectedChannelId === null ? colors.primaryForeground : colors.mutedForeground },
-              ]}
-            >
-              All
-            </Text>
-          </TouchableOpacity>
-          {channels.map((ch) => (
-            <TouchableOpacity
-              key={ch.id}
-              style={[
-                styles.chip,
-                selectedChannelId === ch.id && { backgroundColor: colors.primary },
-                selectedChannelId !== ch.id && { backgroundColor: colors.muted, borderColor: colors.border, borderWidth: 1 },
-              ]}
-              onPress={() => handleChannelSelect(ch.id)}
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  { color: selectedChannelId === ch.id ? colors.primaryForeground : colors.foreground },
-                ]}
-                numberOfLines={1}
-              >
-                {ch.name}
-              </Text>
-              {managingChannels && (
-                <TouchableOpacity
-                  onPress={() => handleRemoveChannel(ch)}
-                  hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                >
-                  <Feather name="x" size={12} color={selectedChannelId === ch.id ? colors.primaryForeground : colors.mutedForeground} />
-                </TouchableOpacity>
-              )}
+      {/* Search bar */}
+      <View style={[styles.searchRow, { borderBottomColor: colors.border }]}>
+        <View style={[styles.searchBox, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+          <Feather name="search" size={16} color={colors.mutedForeground} style={styles.searchIcon} />
+          <TextInput
+            ref={inputRef}
+            value={query}
+            onChangeText={setQuery}
+            onSubmitEditing={handleSearch}
+            returnKeyType="search"
+            placeholder="Search YouTube videos…"
+            placeholderTextColor={colors.mutedForeground}
+            style={[styles.searchInput, { color: colors.foreground }]}
+            autoCorrect={false}
+            autoCapitalize="none"
+          />
+          {query.length > 0 && (
+            <TouchableOpacity onPress={() => { setQuery(""); setResults([]); setHasSearched(false); }}>
+              <Feather name="x" size={15} color={colors.mutedForeground} />
             </TouchableOpacity>
-          ))}
-        </ScrollView>
+          )}
+        </View>
+        <TouchableOpacity
+          style={[styles.searchBtn, { backgroundColor: colors.primary, opacity: !query.trim() || isSearching ? 0.5 : 1 }]}
+          onPress={handleSearch}
+          disabled={!query.trim() || isSearching}
+        >
+          <Text style={styles.searchBtnText}>Search</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* States */}
+      {isSearching && (
+        <View style={styles.centered}>
+          <ActivityIndicator color={colors.primary} size="large" />
+        </View>
       )}
 
-      {channels.length === 0 ? (
-        <View style={{ flex: 1, paddingBottom: bottomPad }}>
-          <EmptyState
-            icon="youtube"
-            title="No channels yet"
-            subtitle="Add your favourite YouTube channels to start watching their latest videos"
-            actionLabel="Add Channel"
-            onAction={() => setAddModalVisible(true)}
-          />
+      {!isSearching && searchError && (
+        <View style={styles.centered}>
+          <Feather name="alert-circle" size={32} color={colors.destructive ?? "#ef4444"} />
+          <Text style={[styles.errorText, { color: colors.mutedForeground }]}>{searchError}</Text>
         </View>
-      ) : isLoading ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          <Feather name="loader" size={24} color={colors.mutedForeground} />
+      )}
+
+      {!isSearching && !hasSearched && (
+        <View style={styles.centered}>
+          <Feather name="search" size={40} color={colors.mutedForeground} style={{ marginBottom: 16 }} />
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Search for videos</Text>
+          <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
+            Find any YouTube video, then download it as MP4 or MP3.
+          </Text>
         </View>
-      ) : videos.length === 0 ? (
-        <View style={{ flex: 1, paddingBottom: bottomPad }}>
-          <EmptyState
-            icon="video-off"
-            title="No videos"
-            subtitle={order === "popular" ? "No popular videos found for this channel" : "No recent videos found for this channel"}
-          />
+      )}
+
+      {!isSearching && hasSearched && results.length === 0 && !searchError && (
+        <View style={styles.centered}>
+          <Feather name="video-off" size={32} color={colors.mutedForeground} style={{ marginBottom: 12 }} />
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No results</Text>
+          <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>Try a different search term.</Text>
         </View>
-      ) : (
+      )}
+
+      {!isSearching && results.length > 0 && (
         <FlatList
-          data={videos}
+          data={results}
           keyExtractor={(v) => v.videoId}
           renderItem={({ item }) => <VideoCard video={item} onPress={setPlayerVideo} />}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingTop: 12, paddingBottom: (Platform.OS === "web" ? 34 : insets.bottom) + 90 }}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={colors.primary}
-            />
-          }
+          contentContainerStyle={{
+            paddingTop: 12,
+            paddingBottom: bottomPad + 90,
+          }}
         />
       )}
 
-      <AddChannelModal
-        visible={addModalVisible}
-        onClose={() => setAddModalVisible(false)}
-        type="channel"
-        existingChannels={channels}
-      />
       <VideoPlayerModal video={playerVideo} onClose={() => setPlayerVideo(null)} />
     </View>
   );
@@ -229,69 +151,74 @@ export default function FeedScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingBottom: 10,
+    paddingHorizontal: 20,
+    paddingBottom: 12,
   },
   logo: {
     fontSize: 22,
     fontFamily: "Inter_700Bold",
     letterSpacing: -0.5,
   },
-  headerActions: {
+  searchRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  headerBtn: {
-    padding: 6,
+  searchBox: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    height: 40,
+    gap: 6,
   },
-  addBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+  searchIcon: { flexShrink: 0 },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    height: 40,
+  },
+  searchBtn: {
+    height: 40,
+    paddingHorizontal: 16,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
-  chips: {
-    maxHeight: 48,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexGrow: 0,
+  searchBtnText: {
+    color: "#fff",
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
   },
-  chipsContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
+  centered: {
+    flex: 1,
     alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 40,
   },
-  chip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
+  emptyTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_600SemiBold",
+    marginBottom: 8,
+    textAlign: "center",
   },
-  chipText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    maxWidth: 120,
+  emptySubtitle: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    lineHeight: 22,
   },
-  orderToggle: {
-    flexDirection: "row",
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-  orderBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 16,
-  },
-  orderBtnText: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
+  errorText: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    marginTop: 10,
+    lineHeight: 22,
   },
 });
