@@ -48,15 +48,37 @@ const FORMAT_1080 = [
 ].join("/");
 
 // ── Proxy helpers ────────────────────────────────────────────────────────────
-const BOT_PHRASES = [
-  "sign in", "bot", "429", "403", "blocked", "unavailable",
-  "private video", "video unavailable", "confirm your age",
-  "http error 407", "proxy", "nsig", "sabr",
+const COOKIE_PHRASES = [
+  "sign in to confirm", "confirm you're not a bot", "use --cookies",
+  "authentication. see https://github.com/yt-dlp",
 ];
+
+const BOT_PHRASES = [
+  "429", "403", "blocked", "nsig", "sabr",
+  "http error 407", "proxy",
+];
+
+function needsCookies(text: string): boolean {
+  const lower = text.toLowerCase();
+  return COOKIE_PHRASES.some((p) => lower.includes(p));
+}
 
 function isRetryable(text: string): boolean {
   const lower = text.toLowerCase();
   return BOT_PHRASES.some((p) => lower.includes(p));
+}
+
+function friendlyError(raw: string): string {
+  if (needsCookies(raw)) {
+    return "YouTube requires sign-in verification for this video. Add your YouTube cookies via the YTDLP_COOKIES secret to fix this.";
+  }
+  if (raw.toLowerCase().includes("private video")) {
+    return "This video is private and cannot be downloaded.";
+  }
+  if (raw.toLowerCase().includes("video unavailable")) {
+    return "This video is unavailable (deleted, region-locked, or age-restricted).";
+  }
+  return raw;
 }
 
 function getProxyList(): Array<string | null> {
@@ -228,7 +250,7 @@ async function runDownload(
 
   logger.error({ videoId, format, err: lastErr }, "video download failed after all attempts");
   job.status = "error";
-  job.error = lastErr?.message ?? "Download failed";
+  job.error = friendlyError(lastErr?.message ?? "Download failed");
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────────
