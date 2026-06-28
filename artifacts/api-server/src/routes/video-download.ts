@@ -114,7 +114,7 @@ async function spawnDownload(
       // ios player client is far less restricted than web/web_embedded on
       // datacenter IPs — it uses YouTube's mobile API which has weaker bot
       // detection. Fall back through mweb and web_embedded if needed.
-      "--extractor-args", "youtube:player_client=ios,mweb,web_embedded",
+      "--extractor-args", "youtube:player_client=android,ios,tv_embedded,web_embedded",
       ...extraArgs,
       ...ffmpegArgs(),
       ...formatArgs,
