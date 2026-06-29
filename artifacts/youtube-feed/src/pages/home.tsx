@@ -9,6 +9,7 @@ import { VideoSkeleton } from "../components/video-skeleton";
 import { formatViews, formatDuration } from "../lib/utils";
 import { useVideoDownload, type DlFormat } from "../hooks/use-video-download";
 import { formatDistanceToNow } from "date-fns";
+import { customFetch } from "@workspace/api-client-react";
 import type { Video } from "@workspace/api-client-react";
 
 // ── Download Modal ────────────────────────────────────────────────────────────
@@ -328,12 +329,7 @@ export default function Home() {
     setHasSearched(true);
     setResults([]);
     try {
-      const resp = await fetch(`/api/videos/search?q=${encodeURIComponent(trimmed)}&maxResults=24`);
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        throw new Error((data as any).error ?? `Search failed (${resp.status})`);
-      }
-      const data = await resp.json();
+      const data = await customFetch<Video[]>(`/api/videos/search?q=${encodeURIComponent(trimmed)}&maxResults=24`);
       setResults(data);
     } catch (err: any) {
       setSearchError(err.message ?? "Search failed");
