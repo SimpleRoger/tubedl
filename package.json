@@ -10,6 +10,9 @@
   },
   "private": true,
   "packageManager": "pnpm@11.8.0",
+  "pnpm": {
+    "onlyBuiltDependencies": ["@swc/core", "esbuild", "msw", "unrs-resolver"]
+  },
   "devDependencies": {
     "typescript": "~5.9.2",
     "prettier": "^3.8.1"
