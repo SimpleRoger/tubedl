@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import { customFetch } from "@workspace/api-client-react";
 
 export type DlStatus = "idle" | "running" | "done" | "error";
 export type DlFormat = "mp4" | "mp3";
@@ -15,15 +16,8 @@ export interface DlState {
 
 const POLL_MS = 1500;
 
-const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
-
 async function fetchJson<T>(url: string, opts?: RequestInit): Promise<T> {
-  const r = await fetch(url, opts);
-  if (!r.ok) {
-    const body = await r.json().catch(() => ({}));
-    throw new Error((body as any).error ?? `HTTP ${r.status}`);
-  }
-  return r.json() as Promise<T>;
+  return customFetch<T>(url, opts);
 }
 
 function triggerBrowserDownload(url: string, filename: string) {
@@ -62,7 +56,7 @@ export function useVideoDownload() {
 
     let jobId: string;
     try {
-      const { jobId: id } = await fetchJson<{ jobId: string }>(`${BASE}/api/video-download`, {
+      const { jobId: id } = await fetchJson<{ jobId: string }>(`/api/video-download`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ videoId, title, format, startTime, endTime }),
@@ -75,7 +69,7 @@ export function useVideoDownload() {
 
     pollRef.current = setInterval(async () => {
       try {
-        const data = await fetchJson<DlState & { status: DlStatus }>(`${BASE}/api/video-download/job/${jobId}`);
+        const data = await fetchJson<DlState & { status: DlStatus }>(`/api/video-download/job/${jobId}`);
         if (data.status === "done" || data.status === "error") {
           stopPoll();
           setState({
@@ -88,7 +82,7 @@ export function useVideoDownload() {
             format,
           });
           if (data.status === "done" && data.fileId && data.filename) {
-            const url = `${BASE}/api/video-download/file/${data.fileId}`;
+            const url = `/api/video-download/file/${data.fileId}`;
             triggerBrowserDownload(url, data.filename);
           }
         } else {
@@ -113,7 +107,7 @@ export function useVideoDownload() {
     setState({ status: "idle", pct: 0, message: "" });
   }, []);
 
-  const downloadUrl = state.fileId ? `${BASE}/api/video-download/file/${state.fileId}` : null;
+  const downloadUrl = state.fileId ? `/api/video-download/file/${state.fileId}` : null;
 
   return { state, start, reset, downloadUrl };
 }
