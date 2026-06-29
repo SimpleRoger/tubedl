@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from "react";
-import { customFetch } from "@workspace/api-client-react";
+import { customFetch, getApiUrl } from "@workspace/api-client-react";
 
 export type DlStatus = "idle" | "running" | "done" | "error";
 export type DlFormat = "mp4" | "mp3";
@@ -82,7 +82,7 @@ export function useVideoDownload() {
             format,
           });
           if (data.status === "done" && data.fileId && data.filename) {
-            const url = `/api/video-download/file/${data.fileId}`;
+            const url = getApiUrl(`/api/video-download/file/${data.fileId}`);
             triggerBrowserDownload(url, data.filename);
           }
         } else {
@@ -107,7 +107,7 @@ export function useVideoDownload() {
     setState({ status: "idle", pct: 0, message: "" });
   }, []);
 
-  const downloadUrl = state.fileId ? `/api/video-download/file/${state.fileId}` : null;
+  const downloadUrl = state.fileId ? getApiUrl(`/api/video-download/file/${state.fileId}`) : null;
 
   return { state, start, reset, downloadUrl };
 }

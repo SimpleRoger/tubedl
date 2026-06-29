@@ -29,6 +29,10 @@ export function setBaseUrl(url: string | null): void {
   _baseUrl = url ? url.replace(/\/+$/, "") : null;
 }
 
+export function getApiUrl(path: string): string {
+  return _baseUrl ? `${_baseUrl}${path}` : path;
+}
+
 /**
  * Register a getter that supplies a bearer auth token.  Before every fetch
  * the getter is invoked; when it returns a non-null string, an
