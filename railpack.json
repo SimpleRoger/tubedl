@@ -3,13 +3,5 @@
   "packages": {
     "node": "22",
     "pnpm": "10"
-  },
-  "steps": {
-    "install": {
-      "commands": ["pip install -r requirements.txt"]
-    },
-    "build": {
-      "commands": ["pnpm install --frozen-lockfile", "pnpm --filter @workspace/youtube-feed build"]
-    }
   }
 }
