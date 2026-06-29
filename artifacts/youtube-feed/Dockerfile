@@ -8,6 +8,9 @@ COPY . .
 
 RUN pnpm install --frozen-lockfile --ignore-scripts
 
+ENV PORT=5173
+ENV BASE_PATH=/
+
 RUN pnpm --filter @workspace/youtube-feed build
 
 EXPOSE 5173
