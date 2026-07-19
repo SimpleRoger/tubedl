@@ -45,7 +45,7 @@ async function downloadMp3(videoId: string, outDir: string): Promise<string> {
     const child = spawn(getYtdlpBin(), [
       "--cache-dir", YTDLP_CACHE_DIR,
       "--no-playlist",
-      "--extractor-args", "youtube:player_client=android,ios,tv_embedded,web_embedded",
+      "--extractor-args", "youtube:player_client=android,ios,tv_embedded,web_embedded;player_js_variant=tv",
       ...ffmpegArgs(),
       "-x", "--audio-format", "mp3", "--audio-quality", "0",
       "--output", outTemplate,
