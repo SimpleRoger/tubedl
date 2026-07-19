@@ -93,6 +93,29 @@ async function runMp3Extraction(jobId: string, videoId: string) {
   }
 }
 
+function sendMp3File(req: Request, res: Response, filePath: string): void {
+  const stat = fs.statSync(filePath);
+  res.setHeader("Content-Type", "audio/mpeg");
+  res.setHeader("Accept-Ranges", "bytes");
+
+  const rangeHeader = req.headers.range;
+  if (rangeHeader && stat.size > 0) {
+    const m = rangeHeader.match(/bytes=(\d*)-(\d*)/);
+    if (m) {
+      const start = m[1] ? parseInt(m[1], 10) : 0;
+      const end = m[2] ? Math.min(parseInt(m[2], 10), stat.size - 1) : stat.size - 1;
+      res.status(206);
+      res.setHeader("Content-Range", `bytes ${start}-${end}/${stat.size}`);
+      res.setHeader("Content-Length", String(end - start + 1));
+      fs.createReadStream(filePath, { start, end }).pipe(res);
+      return;
+    }
+  }
+
+  res.setHeader("Content-Length", stat.size);
+  fs.createReadStream(filePath).pipe(res);
+}
+
 function parseVideoId(input: string): string | null {
   try {
     const url = new URL(input);
@@ -190,6 +213,30 @@ router.delete("/saved/:videoId", async (req, res): Promise<void> => {
   res.status(204).send();
 });
 
+// Fetch the mp3 for a random saved video. Registered before the
+// /saved/:videoId/mp3 routes below so "random" isn't swallowed as a videoId.
+// If the picked video hasn't been extracted yet, kicks off extraction and
+// returns {videoId, jobId} instead of the file — poll
+// /saved/:videoId/mp3/job/:jobId, then GET /saved/:videoId/mp3.
+router.get("/saved/random/mp3", async (req: Request, res: Response): Promise<void> => {
+  const rows = await db.select().from(savedVideosTable);
+  if (!rows.length) { res.status(404).json({ error: "No saved videos" }); return; }
+
+  const { videoId } = rows[Math.floor(Math.random() * rows.length)];
+  const filePath = mp3PathFor(videoId);
+
+  if (fs.existsSync(filePath)) {
+    res.setHeader("X-Video-Id", videoId);
+    sendMp3File(req, res, filePath);
+    return;
+  }
+
+  const jobId = randomUUID();
+  mp3Jobs.set(jobId, { status: "running", message: "Starting…", pct: 0, startedAt: Date.now() });
+  runMp3Extraction(jobId, videoId).catch(() => {});
+  res.json({ videoId, jobId });
+});
+
 // Start (or resume) mp3 extraction for a saved video. Returns immediately
 // with a jobId — poll /saved/:videoId/mp3/job/:jobId for progress, then
 // GET /saved/:videoId/mp3 to fetch the finished file.
@@ -230,26 +277,7 @@ router.get("/saved/:videoId/mp3", async (req: Request, res: Response): Promise<v
     return;
   }
 
-  const stat = fs.statSync(filePath);
-  res.setHeader("Content-Type", "audio/mpeg");
-  res.setHeader("Accept-Ranges", "bytes");
-
-  const rangeHeader = req.headers.range;
-  if (rangeHeader && stat.size > 0) {
-    const m = rangeHeader.match(/bytes=(\d*)-(\d*)/);
-    if (m) {
-      const start = m[1] ? parseInt(m[1], 10) : 0;
-      const end = m[2] ? Math.min(parseInt(m[2], 10), stat.size - 1) : stat.size - 1;
-      res.status(206);
-      res.setHeader("Content-Range", `bytes ${start}-${end}/${stat.size}`);
-      res.setHeader("Content-Length", String(end - start + 1));
-      fs.createReadStream(filePath, { start, end }).pipe(res);
-      return;
-    }
-  }
-
-  res.setHeader("Content-Length", stat.size);
-  fs.createReadStream(filePath).pipe(res);
+  sendMp3File(req, res, filePath);
 });
 
 export default router;
