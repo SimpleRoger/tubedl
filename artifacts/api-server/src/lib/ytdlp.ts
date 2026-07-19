@@ -46,6 +46,13 @@ export const YTDLP_CACHE_DIR =
   process.env.YTDLP_CACHE_DIR ??
   path.resolve(__dirname, "../../../.ytdlp-cache");
 
+// Persistent storage for extracted mp3s of saved videos. On Railway this
+// should point at a mounted Volume (e.g. MP3_STORAGE_DIR=/data/mp3s) so
+// files survive redeploys; falls back to a local dir for dev.
+export const MP3_STORAGE_DIR =
+  process.env.MP3_STORAGE_DIR ??
+  path.resolve(__dirname, "../../../.mp3-storage");
+
 // ── ffmpeg ────────────────────────────────────────────────────────────────────
 function resolveFfmpegBin(): string {
   if (process.env.FFMPEG_PATH && fs.existsSync(process.env.FFMPEG_PATH))
