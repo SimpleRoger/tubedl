@@ -39,9 +39,11 @@ function formatViews(views?: string | null): string {
 interface VideoCardProps {
   video: Video;
   onPress?: (video: Video) => void;
+  isSaved?: boolean;
+  onToggleSave?: (video: Video) => void;
 }
 
-export function VideoCard({ video, onPress }: VideoCardProps) {
+export function VideoCard({ video, onPress, isSaved, onToggleSave }: VideoCardProps) {
   const colors = useColors();
   const duration = parseDuration(video.duration);
   const views = formatViews(video.viewCount);
@@ -68,6 +70,18 @@ export function VideoCard({ video, onPress }: VideoCardProps) {
           <View style={styles.durationBadge}>
             <Text style={styles.durationText}>{duration}</Text>
           </View>
+        ) : null}
+        {onToggleSave ? (
+          <TouchableOpacity
+            onPress={() => onToggleSave(video)}
+            style={[
+              styles.saveBadge,
+              { backgroundColor: isSaved ? colors.primary : "rgba(0,0,0,0.6)" },
+            ]}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Feather name="bookmark" size={14} color="#fff" />
+          </TouchableOpacity>
         ) : null}
       </View>
 
@@ -128,6 +142,16 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
+  },
+  saveBadge: {
+    position: "absolute",
+    top: 6,
+    left: 6,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
   },
   info: {
     padding: 10,

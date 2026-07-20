@@ -1,14 +1,16 @@
 import { formatDistanceToNow } from "date-fns";
-import { Play } from "lucide-react";
+import { Play, Bookmark } from "lucide-react";
 import type { Video } from "@workspace/api-client-react";
 import { formatViews, formatDuration } from "../lib/utils";
 
 interface VideoCardProps {
   video: Video;
   onClick: (video: Video) => void;
+  isSaved?: boolean;
+  onToggleSave?: (video: Video) => void;
 }
 
-export function VideoCard({ video, onClick }: VideoCardProps) {
+export function VideoCard({ video, onClick, isSaved, onToggleSave }: VideoCardProps) {
   const publishedDate = new Date(video.publishedAt);
   const relativeDate = isNaN(publishedDate.getTime())
     ? video.publishedAt
@@ -17,9 +19,14 @@ export function VideoCard({ video, onClick }: VideoCardProps) {
   const durationFormatted = formatDuration(video.duration);
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onClick(video)}
-      className="group flex flex-col gap-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-xl w-full"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") onClick(video);
+      }}
+      className="group flex flex-col gap-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-xl w-full cursor-pointer"
     >
       {/* Thumbnail */}
       <div className="relative aspect-video rounded-xl overflow-hidden bg-surface shadow-lg border border-border group-hover:border-border-hover transition-colors">
@@ -37,8 +44,26 @@ export function VideoCard({ video, onClick }: VideoCardProps) {
           </div>
         )}
 
+        {/* Save button */}
+        {onToggleSave && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSave(video);
+            }}
+            title={isSaved ? "Remove from saved" : "Save video"}
+            className={`absolute top-2 left-2 p-1.5 rounded-full backdrop-blur-sm transition-colors ${
+              isSaved
+                ? "bg-primary text-white"
+                : "bg-black/60 text-white/80 hover:text-white hover:bg-black/80"
+            }`}
+          >
+            <Bookmark className="w-4 h-4" fill={isSaved ? "currentColor" : "none"} />
+          </button>
+        )}
+
         {/* Play Overlay */}
-        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center pointer-events-none">
           <div className="w-14 h-14 bg-primary/90 text-white rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(255,0,0,0.4)] backdrop-blur-sm transform scale-90 group-hover:scale-100 transition-transform duration-300">
             <Play className="w-6 h-6 ml-1" fill="currentColor" />
           </div>
@@ -76,6 +101,6 @@ export function VideoCard({ video, onClick }: VideoCardProps) {
           </div>
         </div>
       </div>
-    </button>
+    </div>
   );
 }
