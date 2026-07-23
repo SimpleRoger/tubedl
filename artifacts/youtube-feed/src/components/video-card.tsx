@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from "date-fns";
-import { Play, Bookmark } from "lucide-react";
+import { Play, Bookmark, Music2 } from "lucide-react";
 import type { Video } from "@workspace/api-client-react";
 import { formatViews, formatDuration } from "../lib/utils";
 
@@ -8,9 +8,10 @@ interface VideoCardProps {
   onClick: (video: Video) => void;
   isSaved?: boolean;
   onToggleSave?: (video: Video) => void;
+  mp3Ready?: boolean;
 }
 
-export function VideoCard({ video, onClick, isSaved, onToggleSave }: VideoCardProps) {
+export function VideoCard({ video, onClick, isSaved, onToggleSave, mp3Ready }: VideoCardProps) {
   const publishedDate = new Date(video.publishedAt);
   const relativeDate = isNaN(publishedDate.getTime())
     ? video.publishedAt
@@ -41,6 +42,18 @@ export function VideoCard({ video, onClick, isSaved, onToggleSave }: VideoCardPr
         {durationFormatted && (
           <div className="absolute bottom-2 right-2 bg-black/80 px-1.5 py-0.5 rounded text-xs font-medium text-white backdrop-blur-sm">
             {durationFormatted}
+          </div>
+        )}
+
+        {/* MP3 status pill */}
+        {mp3Ready !== undefined && (
+          <div
+            className={`absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium backdrop-blur-sm ${
+              mp3Ready ? "bg-primary/90 text-white" : "bg-black/70 text-white/70"
+            }`}
+          >
+            <Music2 className="w-3 h-3" />
+            {mp3Ready ? "MP3 ready" : "Not extracted"}
           </div>
         )}
 

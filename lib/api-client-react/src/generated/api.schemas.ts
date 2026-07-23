@@ -151,6 +151,7 @@ export interface SavedVideoItem {
   duration?: string | null;
   publishedAt: string;
   savedAt: string;
+  mp3Ready: boolean;
 }
 
 export interface SaveVideoBody {

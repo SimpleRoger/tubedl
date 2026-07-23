@@ -314,6 +314,7 @@ export const ListSavedVideosResponseItem = zod.object({
   duration: zod.string().nullish(),
   publishedAt: zod.string(),
   savedAt: zod.string(),
+  mp3Ready: zod.boolean(),
 });
 export const ListSavedVideosResponse = zod.array(ListSavedVideosResponseItem);
 

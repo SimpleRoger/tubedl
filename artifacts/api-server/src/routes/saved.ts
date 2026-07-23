@@ -144,7 +144,7 @@ router.get("/saved", async (req, res): Promise<void> => {
     .from(savedVideosTable)
     .orderBy(savedVideosTable.savedAt);
   saved.reverse();
-  res.json(saved);
+  res.json(saved.map((row) => ({ ...row, mp3Ready: fs.existsSync(mp3PathFor(row.videoId)) })));
 });
 
 router.get("/saved/:videoId", async (req, res): Promise<void> => {

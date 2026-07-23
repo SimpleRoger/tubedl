@@ -41,9 +41,10 @@ interface VideoCardProps {
   onPress?: (video: Video) => void;
   isSaved?: boolean;
   onToggleSave?: (video: Video) => void;
+  mp3Ready?: boolean;
 }
 
-export function VideoCard({ video, onPress, isSaved, onToggleSave }: VideoCardProps) {
+export function VideoCard({ video, onPress, isSaved, onToggleSave, mp3Ready }: VideoCardProps) {
   const colors = useColors();
   const duration = parseDuration(video.duration);
   const views = formatViews(video.viewCount);
@@ -69,6 +70,17 @@ export function VideoCard({ video, onPress, isSaved, onToggleSave }: VideoCardPr
         {duration ? (
           <View style={styles.durationBadge}>
             <Text style={styles.durationText}>{duration}</Text>
+          </View>
+        ) : null}
+        {mp3Ready !== undefined ? (
+          <View
+            style={[
+              styles.mp3Badge,
+              { backgroundColor: mp3Ready ? colors.primary : "rgba(0,0,0,0.7)" },
+            ]}
+          >
+            <Feather name="music" size={11} color="#fff" />
+            <Text style={styles.mp3BadgeText}>{mp3Ready ? "MP3 ready" : "Not extracted"}</Text>
           </View>
         ) : null}
         {onToggleSave ? (
@@ -141,6 +153,22 @@ const styles = StyleSheet.create({
   durationText: {
     color: "#fff",
     fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  mp3Badge: {
+    position: "absolute",
+    bottom: 6,
+    left: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  mp3BadgeText: {
+    color: "#fff",
+    fontSize: 10,
     fontFamily: "Inter_600SemiBold",
   },
   saveBadge: {

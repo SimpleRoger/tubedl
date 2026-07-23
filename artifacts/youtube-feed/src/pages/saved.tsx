@@ -66,6 +66,7 @@ export default function Saved() {
                   onClick={setSelectedVideo}
                   isSaved={savedIds.has(video.videoId)}
                   onToggleSave={toggleSave}
+                  mp3Ready={video.mp3Ready}
                 />
               </motion.div>
             ))}

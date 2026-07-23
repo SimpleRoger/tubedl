@@ -56,6 +56,7 @@ export default function SavedScreen() {
               onPress={setPlayerVideo}
               isSaved={savedIds.has(item.videoId)}
               onToggleSave={toggleSave}
+              mp3Ready={item.mp3Ready}
             />
           )}
           showsVerticalScrollIndicator={false}
