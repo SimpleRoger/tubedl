@@ -139,6 +139,25 @@ function resolveCookiePath(): string | null {
   return null;
 }
 
+/**
+ * PO token provider (bgutil-ytdlp-pot-provider) — satisfies YouTube's bot-check
+ * with a generated proof-of-origin token instead of session cookies, so
+ * downloads keep working without needing YTDLP_COOKIES refreshed.
+ *
+ * BGUTIL_POT_URL points at the companion HTTP server (a separate Railway
+ * service reached over the private network, e.g.
+ * http://bgutil-pot.railway.internal:4416). Left unset, yt-dlp just runs
+ * without a PO token provider (falls back to cookies).
+ */
+function potProviderArgs(): string[] {
+  const url = process.env.BGUTIL_POT_URL?.trim();
+  if (!url) {
+    logger.warn("BGUTIL_POT_URL not set — yt-dlp has no PO token provider, relying on cookies only");
+    return [];
+  }
+  return ["--extractor-args", `youtubepot-bgutilhttp:base_url=${url}`];
+}
+
 /** Returns yt-dlp auth args to append to every download command. */
 export function authArgs(): string[] {
   const p = resolveCookiePath();
@@ -147,7 +166,7 @@ export function authArgs(): string[] {
     const envLen = process.env.YTDLP_COOKIES?.length ?? 0;
     console.error(`[YTDLP] first auth call: cookiePath=${p ?? "NONE"} YTDLP_COOKIES_env_len=${envLen}`);
   }
-  return p ? ["--cookies", p] : [];
+  return [...(p ? ["--cookies", p] : []), ...potProviderArgs()];
 }
 let _logged = false;
 

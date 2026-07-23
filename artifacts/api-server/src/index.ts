@@ -9,7 +9,12 @@ import { execFileSync, execSync } from "child_process";
 // In production, .pythonlibs is NOT tracked in git.  We pip-install yt-dlp +
 // curl_cffi at startup so they exist before any download request arrives.
 (function ensurePythonDeps() {
-  const packages = ["yt-dlp==2026.03.17", "curl_cffi==0.13.0", "imageio-ffmpeg"];
+  const packages = [
+    "yt-dlp==2026.03.17",
+    "curl_cffi==0.13.0",
+    "imageio-ffmpeg",
+    "bgutil-ytdlp-pot-provider==1.3.1",
+  ];
 
   let installed = false;
   for (const pip of ["pip", "pip3"]) {
