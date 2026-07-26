@@ -178,7 +178,7 @@ async function runDownload(
   // Build format-specific yt-dlp args
   const isMp3 = format === "mp3";
   const formatArgs = isMp3
-    ? ["-x", "--audio-format", "mp3", "--audio-quality", "0"]
+    ? ["-x", "--audio-format", "mp3", "--audio-quality", "5"]
     : ["--format", FORMAT_1080, "--merge-output-format", "mp4"];
   const ext = isMp3 ? "mp3" : "mp4";
 
