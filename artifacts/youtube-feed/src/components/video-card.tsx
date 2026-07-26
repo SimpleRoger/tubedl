@@ -1,6 +1,6 @@
 import { formatDistanceToNow } from "date-fns";
-import { Play, Bookmark, Music2 } from "lucide-react";
-import type { Video } from "@workspace/api-client-react";
+import { Play, Bookmark, Music2, Loader2, AlertCircle } from "lucide-react";
+import type { Video, Mp3ExtractionState } from "@workspace/api-client-react";
 import { formatViews, formatDuration } from "../lib/utils";
 
 interface VideoCardProps {
@@ -9,9 +9,13 @@ interface VideoCardProps {
   isSaved?: boolean;
   onToggleSave?: (video: Video) => void;
   mp3Ready?: boolean;
+  mp3Extraction?: Mp3ExtractionState;
+  onExtractMp3?: (video: Video) => void;
 }
 
-export function VideoCard({ video, onClick, isSaved, onToggleSave, mp3Ready }: VideoCardProps) {
+export function VideoCard({
+  video, onClick, isSaved, onToggleSave, mp3Ready, mp3Extraction, onExtractMp3,
+}: VideoCardProps) {
   const publishedDate = new Date(video.publishedAt);
   const relativeDate = isNaN(publishedDate.getTime())
     ? video.publishedAt
@@ -47,14 +51,37 @@ export function VideoCard({ video, onClick, isSaved, onToggleSave, mp3Ready }: V
 
         {/* MP3 status pill */}
         {mp3Ready !== undefined && (
-          <div
-            className={`absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium backdrop-blur-sm ${
-              mp3Ready ? "bg-primary/90 text-white" : "bg-black/70 text-white/70"
-            }`}
-          >
-            <Music2 className="w-3 h-3" />
-            {mp3Ready ? "MP3 ready" : "Not extracted"}
-          </div>
+          mp3Ready ? (
+            <div className="absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium backdrop-blur-sm bg-primary/90 text-white">
+              <Music2 className="w-3 h-3" />
+              MP3 ready
+            </div>
+          ) : mp3Extraction?.status === "running" ? (
+            <div className="absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium backdrop-blur-sm bg-black/70 text-white/90">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              {mp3Extraction.pct}%
+            </div>
+          ) : (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onExtractMp3?.(video);
+              }}
+              title={mp3Extraction?.status === "error" ? mp3Extraction.error : "Extract mp3"}
+              className={`absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium backdrop-blur-sm transition-colors ${
+                mp3Extraction?.status === "error"
+                  ? "bg-red-500/80 text-white hover:bg-red-500"
+                  : "bg-black/70 text-white/70 hover:text-white hover:bg-black/85"
+              }`}
+            >
+              {mp3Extraction?.status === "error" ? (
+                <AlertCircle className="w-3 h-3" />
+              ) : (
+                <Music2 className="w-3 h-3" />
+              )}
+              {mp3Extraction?.status === "error" ? "Retry" : "Not extracted"}
+            </button>
+          )
         )}
 
         {/* Save button */}

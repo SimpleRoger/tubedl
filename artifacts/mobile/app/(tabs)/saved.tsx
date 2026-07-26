@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { VideoCard } from "@/components/VideoCard";
 import { VideoPlayerModal } from "@/components/VideoPlayerModal";
-import { useSavedVideos } from "@workspace/api-client-react";
+import { useSavedVideos, useMp3Extraction } from "@workspace/api-client-react";
 import type { Video } from "@workspace/api-client-react";
 
 export default function SavedScreen() {
@@ -13,6 +13,7 @@ export default function SavedScreen() {
   const insets = useSafeAreaInsets();
   const [playerVideo, setPlayerVideo] = useState<Video | null>(null);
   const { savedQuery, savedIds, toggleSave } = useSavedVideos();
+  const { extracting, extractMp3 } = useMp3Extraction();
   const videos = savedQuery.data ?? [];
 
   return (
@@ -57,6 +58,8 @@ export default function SavedScreen() {
               isSaved={savedIds.has(item.videoId)}
               onToggleSave={toggleSave}
               mp3Ready={item.mp3Ready}
+              mp3Extraction={extracting[item.videoId]}
+              onExtractMp3={(v) => extractMp3(v.videoId)}
             />
           )}
           showsVerticalScrollIndicator={false}

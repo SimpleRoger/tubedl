@@ -5,12 +5,13 @@ import { VideoCard } from "../components/video-card";
 import { VideoSkeleton } from "../components/video-skeleton";
 import { DownloadModal } from "../components/download-modal";
 import { Header } from "../components/header";
-import { useSavedVideos } from "@workspace/api-client-react";
+import { useSavedVideos, useMp3Extraction } from "@workspace/api-client-react";
 import type { Video } from "@workspace/api-client-react";
 
 export default function Saved() {
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const { savedQuery, savedIds, toggleSave } = useSavedVideos();
+  const { extracting, extractMp3 } = useMp3Extraction();
   const videos = savedQuery.data ?? [];
 
   const skeletons = Array.from({ length: 8 });
@@ -67,6 +68,8 @@ export default function Saved() {
                   isSaved={savedIds.has(video.videoId)}
                   onToggleSave={toggleSave}
                   mp3Ready={video.mp3Ready}
+                  mp3Extraction={extracting[video.videoId]}
+                  onExtractMp3={(v) => extractMp3(v.videoId)}
                 />
               </motion.div>
             ))}

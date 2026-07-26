@@ -1,9 +1,9 @@
 import { Feather } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useColors } from "@/hooks/useColors";
-import type { Video } from "@workspace/api-client-react";
+import type { Video, Mp3ExtractionState } from "@workspace/api-client-react";
 
 function parseDuration(duration?: string | null): string {
   if (!duration) return "";
@@ -42,9 +42,13 @@ interface VideoCardProps {
   isSaved?: boolean;
   onToggleSave?: (video: Video) => void;
   mp3Ready?: boolean;
+  mp3Extraction?: Mp3ExtractionState;
+  onExtractMp3?: (video: Video) => void;
 }
 
-export function VideoCard({ video, onPress, isSaved, onToggleSave, mp3Ready }: VideoCardProps) {
+export function VideoCard({
+  video, onPress, isSaved, onToggleSave, mp3Ready, mp3Extraction, onExtractMp3,
+}: VideoCardProps) {
   const colors = useColors();
   const duration = parseDuration(video.duration);
   const views = formatViews(video.viewCount);
@@ -73,15 +77,34 @@ export function VideoCard({ video, onPress, isSaved, onToggleSave, mp3Ready }: V
           </View>
         ) : null}
         {mp3Ready !== undefined ? (
-          <View
-            style={[
-              styles.mp3Badge,
-              { backgroundColor: mp3Ready ? colors.primary : "rgba(0,0,0,0.7)" },
-            ]}
-          >
-            <Feather name="music" size={11} color="#fff" />
-            <Text style={styles.mp3BadgeText}>{mp3Ready ? "MP3 ready" : "Not extracted"}</Text>
-          </View>
+          mp3Ready ? (
+            <View style={[styles.mp3Badge, { backgroundColor: colors.primary }]}>
+              <Feather name="music" size={11} color="#fff" />
+              <Text style={styles.mp3BadgeText}>MP3 ready</Text>
+            </View>
+          ) : mp3Extraction?.status === "running" ? (
+            <View style={[styles.mp3Badge, { backgroundColor: "rgba(0,0,0,0.7)" }]}>
+              <ActivityIndicator size="small" color="#fff" />
+              <Text style={styles.mp3BadgeText}>{mp3Extraction.pct}%</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              onPress={() => onExtractMp3?.(video)}
+              style={[
+                styles.mp3Badge,
+                { backgroundColor: mp3Extraction?.status === "error" ? "#ef4444cc" : "rgba(0,0,0,0.7)" },
+              ]}
+            >
+              <Feather
+                name={mp3Extraction?.status === "error" ? "alert-circle" : "music"}
+                size={11}
+                color="#fff"
+              />
+              <Text style={styles.mp3BadgeText}>
+                {mp3Extraction?.status === "error" ? "Retry" : "Not extracted"}
+              </Text>
+            </TouchableOpacity>
+          )
         ) : null}
         {onToggleSave ? (
           <TouchableOpacity
