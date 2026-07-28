@@ -6,6 +6,11 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+// Railway terminates TLS and proxies as http internally — trust its
+// X-Forwarded-* headers so req.protocol/req.hostname are correct (needed for
+// building absolute URLs, e.g. the RSS feed's enclosure links).
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,

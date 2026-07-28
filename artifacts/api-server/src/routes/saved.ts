@@ -17,6 +17,15 @@ function mp3PathFor(videoId: string): string {
   return path.join(MP3_STORAGE_DIR, `${videoId}.mp3`);
 }
 
+function escapeXml(input: string): string {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 // ── mp3 extraction job store ─────────────────────────────────────────────────
 interface Mp3Job {
   status: "running" | "done" | "error";
@@ -145,6 +154,52 @@ router.get("/saved", async (req, res): Promise<void> => {
     .orderBy(savedVideosTable.savedAt);
   saved.reverse();
   res.json(saved.map((row) => ({ ...row, mp3Ready: fs.existsSync(mp3PathFor(row.videoId)) })));
+});
+
+// Registered before /saved/:videoId below so "feed.rss" isn't swallowed as
+// a videoId. Podcast-style RSS feed of saved videos whose mp3 has already
+// been extracted (unextracted ones have no audio to point an enclosure at).
+router.get("/saved/feed.rss", async (req: Request, res: Response): Promise<void> => {
+  const rows = await db
+    .select()
+    .from(savedVideosTable)
+    .orderBy(savedVideosTable.savedAt);
+  rows.reverse();
+
+  const baseUrl = `${req.protocol}://${req.get("host")}`;
+
+  const items = rows
+    .map((row) => {
+      const filePath = mp3PathFor(row.videoId);
+      if (!fs.existsSync(filePath)) return null;
+      const fileSize = fs.statSync(filePath).size;
+      const pubDate = new Date(row.savedAt).toUTCString();
+      return `    <item>
+      <title>${escapeXml(row.title)}</title>
+      <description>${escapeXml(row.description)}</description>
+      <link>${escapeXml(`https://www.youtube.com/watch?v=${row.videoId}`)}</link>
+      <guid isPermaLink="false">${escapeXml(row.videoId)}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <enclosure url="${escapeXml(`${baseUrl}/api/saved/${row.videoId}/mp3`)}" length="${fileSize}" type="audio/mpeg" />
+      <itunes:author>${escapeXml(row.channelName)}</itunes:author>
+    </item>`;
+    })
+    .filter(Boolean)
+    .join("\n");
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+  <channel>
+    <title>TubeDL Saved</title>
+    <link>${escapeXml(baseUrl)}</link>
+    <description>MP3s extracted from your saved YouTube videos</description>
+    <language>en-us</language>
+${items}
+  </channel>
+</rss>`;
+
+  res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+  res.send(xml);
 });
 
 router.get("/saved/:videoId", async (req, res): Promise<void> => {
