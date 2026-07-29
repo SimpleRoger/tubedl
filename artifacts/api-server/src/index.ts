@@ -103,6 +103,19 @@ import { execFileSync, execSync } from "child_process";
       console.warn("[startup] ffmpeg not found — clips/merging will fail");
     }
   }
+
+  // Diagnostic: yt-dlp needs a JS runtime (Deno or Node) on PATH to solve
+  // YouTube's signature/n-parameter challenges (see ytdlp.ts serverArgs()).
+  // Log whether one is actually reachable so this is visible without
+  // digging through build logs.
+  {
+    try {
+      const version = execSync("deno --version", { encoding: "utf8", timeout: 5000 }).trim();
+      console.log(`[startup] deno found on PATH: ${version.split("\n")[0]}`);
+    } catch (e: any) {
+      console.warn(`[startup] deno NOT found on PATH (${e.message?.split("\n")[0] ?? e})`);
+    }
+  }
 })();
 
 // ── App (imported AFTER env setup above) ─────────────────────────────────────
