@@ -14,7 +14,12 @@
       "backgroundColor": "#0a0a0a"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.simpleroger.tubefeed",
+      "buildNumber": "3",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "backgroundColor": "#0a0a0a"
@@ -35,6 +40,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "479f12a4-9b5e-42de-bce8-b99ad62879dd"
+      }
+    },
+    "owner": "simpleroger"
   }
 }

@@ -15,6 +15,8 @@ import type { Video } from "@workspace/api-client-react";
 interface VideoPlayerModalProps {
   video: Video | null;
   onClose: () => void;
+  isSaved?: boolean;
+  onToggleSave?: (video: Video) => void;
 }
 
 function YoutubeEmbed({ videoId }: { videoId: string }) {
@@ -48,7 +50,7 @@ function YoutubeEmbed({ videoId }: { videoId: string }) {
   );
 }
 
-export function VideoPlayerModal({ video, onClose }: VideoPlayerModalProps) {
+export function VideoPlayerModal({ video, onClose, isSaved, onToggleSave }: VideoPlayerModalProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
 
@@ -90,6 +92,18 @@ export function VideoPlayerModal({ video, onClose }: VideoPlayerModalProps) {
               {video.title}
             </Text>
           </View>
+          {onToggleSave ? (
+            <TouchableOpacity
+              onPress={() => onToggleSave(video)}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Feather
+                name="bookmark"
+                size={22}
+                color={isSaved ? colors.primary : colors.foreground}
+              />
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         <View style={styles.playerContainer}>

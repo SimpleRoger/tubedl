@@ -9,6 +9,10 @@
   "dependencies": {
     "@tanstack/react-query": "catalog:"
   },
+  "devDependencies": {
+    "react": "catalog:",
+    "@types/react": "catalog:"
+  },
   "peerDependencies": {
     "react": ">=18"
   }

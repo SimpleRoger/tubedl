@@ -6,7 +6,7 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv ffmpeg curl \
-  && pip3 install --break-system-packages yt-dlp==2026.03.17 curl_cffi==0.13.0 \
+  && pip3 install --break-system-packages yt-dlp==2026.03.17 curl_cffi==0.13.0 bgutil-ytdlp-pot-provider==1.3.1 \
   && rm -rf /var/lib/apt/lists/*
 
 # yt-dlp auto-detects Deno on PATH and uses it as the JS runtime for solving

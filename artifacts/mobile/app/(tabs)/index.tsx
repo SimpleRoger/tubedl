@@ -13,6 +13,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { VideoCard } from "@/components/VideoCard";
 import { VideoPlayerModal } from "@/components/VideoPlayerModal";
+import { useSavedVideos } from "@workspace/api-client-react";
 import type { Video } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 
@@ -37,6 +38,7 @@ export default function SearchScreen() {
   const [hasSearched, setHasSearched] = useState(false);
   const [playerVideo, setPlayerVideo] = useState<Video | null>(null);
   const inputRef = useRef<TextInput>(null);
+  const { savedIds, toggleSave } = useSavedVideos();
 
   const handleSearch = useCallback(async () => {
     const q = query.trim();
@@ -134,7 +136,14 @@ export default function SearchScreen() {
         <FlatList
           data={results}
           keyExtractor={(v) => v.videoId}
-          renderItem={({ item }) => <VideoCard video={item} onPress={setPlayerVideo} />}
+          renderItem={({ item }) => (
+            <VideoCard
+              video={item}
+              onPress={setPlayerVideo}
+              isSaved={savedIds.has(item.videoId)}
+              onToggleSave={toggleSave}
+            />
+          )}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
             paddingTop: 12,
@@ -143,7 +152,12 @@ export default function SearchScreen() {
         />
       )}
 
-      <VideoPlayerModal video={playerVideo} onClose={() => setPlayerVideo(null)} />
+      <VideoPlayerModal
+        video={playerVideo}
+        onClose={() => setPlayerVideo(null)}
+        isSaved={playerVideo ? savedIds.has(playerVideo.videoId) : false}
+        onToggleSave={toggleSave}
+      />
     </View>
   );
 }

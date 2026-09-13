@@ -1,6 +1,8 @@
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Home from "./pages/home";
+import Saved from "./pages/saved";
+import Channels from "./pages/channels";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -16,6 +18,8 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/saved" component={Saved} />
+      <Route path="/channels" component={Channels} />
       <Route>
         <div className="min-h-screen bg-background flex flex-col items-center justify-center text-center p-4">
           <h1 className="text-6xl font-display font-bold text-text-main mb-4">404</h1>

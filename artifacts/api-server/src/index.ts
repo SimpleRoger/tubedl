@@ -9,7 +9,12 @@ import { execFileSync, execSync } from "child_process";
 // In production, .pythonlibs is NOT tracked in git.  We pip-install yt-dlp +
 // curl_cffi at startup so they exist before any download request arrives.
 (function ensurePythonDeps() {
-  const packages = ["yt-dlp==2026.03.17", "curl_cffi==0.13.0", "imageio-ffmpeg"];
+  const packages = [
+    "yt-dlp==2026.03.17",
+    "curl_cffi==0.13.0",
+    "imageio-ffmpeg",
+    "bgutil-ytdlp-pot-provider==1.3.1",
+  ];
 
   let installed = false;
   for (const pip of ["pip", "pip3"]) {
@@ -96,6 +101,19 @@ import { execFileSync, execSync } from "child_process";
       console.log(`[startup] FFMPEG_PATH set to ${ffFound}`);
     } else {
       console.warn("[startup] ffmpeg not found — clips/merging will fail");
+    }
+  }
+
+  // Diagnostic: yt-dlp needs a JS runtime (Deno or Node) on PATH to solve
+  // YouTube's signature/n-parameter challenges (see ytdlp.ts serverArgs()).
+  // Log whether one is actually reachable so this is visible without
+  // digging through build logs.
+  {
+    try {
+      const version = execSync("deno --version", { encoding: "utf8", timeout: 5000 }).trim();
+      console.log(`[startup] deno found on PATH: ${version.split("\n")[0]}`);
+    } catch (e: any) {
+      console.warn(`[startup] deno NOT found on PATH (${e.message?.split("\n")[0] ?? e})`);
     }
   }
 })();

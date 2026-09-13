@@ -1,14 +1,21 @@
 import { formatDistanceToNow } from "date-fns";
-import { Play } from "lucide-react";
-import type { Video } from "@workspace/api-client-react";
+import { Play, Bookmark, Music2, Loader2, AlertCircle } from "lucide-react";
+import type { Video, Mp3ExtractionState } from "@workspace/api-client-react";
 import { formatViews, formatDuration } from "../lib/utils";
 
 interface VideoCardProps {
   video: Video;
   onClick: (video: Video) => void;
+  isSaved?: boolean;
+  onToggleSave?: (video: Video) => void;
+  mp3Ready?: boolean;
+  mp3Extraction?: Mp3ExtractionState;
+  onExtractMp3?: (video: Video) => void;
 }
 
-export function VideoCard({ video, onClick }: VideoCardProps) {
+export function VideoCard({
+  video, onClick, isSaved, onToggleSave, mp3Ready, mp3Extraction, onExtractMp3,
+}: VideoCardProps) {
   const publishedDate = new Date(video.publishedAt);
   const relativeDate = isNaN(publishedDate.getTime())
     ? video.publishedAt
@@ -17,9 +24,14 @@ export function VideoCard({ video, onClick }: VideoCardProps) {
   const durationFormatted = formatDuration(video.duration);
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onClick(video)}
-      className="group flex flex-col gap-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-xl w-full"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") onClick(video);
+      }}
+      className="group flex flex-col gap-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-xl w-full cursor-pointer"
     >
       {/* Thumbnail */}
       <div className="relative aspect-video rounded-xl overflow-hidden bg-surface shadow-lg border border-border group-hover:border-border-hover transition-colors">
@@ -37,8 +49,61 @@ export function VideoCard({ video, onClick }: VideoCardProps) {
           </div>
         )}
 
+        {/* MP3 status pill */}
+        {mp3Ready !== undefined && (
+          mp3Ready ? (
+            <div className="absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium backdrop-blur-sm bg-primary/90 text-white">
+              <Music2 className="w-3 h-3" />
+              MP3 ready
+            </div>
+          ) : mp3Extraction?.status === "running" ? (
+            <div className="absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium backdrop-blur-sm bg-black/70 text-white/90">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              {mp3Extraction.pct}%
+            </div>
+          ) : (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onExtractMp3?.(video);
+              }}
+              title={mp3Extraction?.status === "error" ? mp3Extraction.error : "Extract mp3"}
+              className={`absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium backdrop-blur-sm transition-colors ${
+                mp3Extraction?.status === "error"
+                  ? "bg-red-500/80 text-white hover:bg-red-500"
+                  : "bg-black/70 text-white/70 hover:text-white hover:bg-black/85"
+              }`}
+            >
+              {mp3Extraction?.status === "error" ? (
+                <AlertCircle className="w-3 h-3" />
+              ) : (
+                <Music2 className="w-3 h-3" />
+              )}
+              {mp3Extraction?.status === "error" ? "Retry" : "Not extracted"}
+            </button>
+          )
+        )}
+
+        {/* Save button */}
+        {onToggleSave && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSave(video);
+            }}
+            title={isSaved ? "Remove from saved" : "Save video"}
+            className={`absolute top-2 left-2 p-1.5 rounded-full backdrop-blur-sm transition-colors ${
+              isSaved
+                ? "bg-primary text-white"
+                : "bg-black/60 text-white/80 hover:text-white hover:bg-black/80"
+            }`}
+          >
+            <Bookmark className="w-4 h-4" fill={isSaved ? "currentColor" : "none"} />
+          </button>
+        )}
+
         {/* Play Overlay */}
-        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center pointer-events-none">
           <div className="w-14 h-14 bg-primary/90 text-white rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(255,0,0,0.4)] backdrop-blur-sm transform scale-90 group-hover:scale-100 transition-transform duration-300">
             <Play className="w-6 h-6 ml-1" fill="currentColor" />
           </div>
@@ -76,6 +141,6 @@ export function VideoCard({ video, onClick }: VideoCardProps) {
           </div>
         </div>
       </div>
-    </button>
+    </div>
   );
 }
