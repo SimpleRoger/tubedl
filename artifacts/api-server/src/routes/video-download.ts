@@ -6,7 +6,7 @@ import fs from "fs";
 import os from "os";
 import { logger } from "../lib/logger";
 import { getYtdlpBin, YTDLP_CACHE_DIR, FFMPEG_DIR, ffmpegArgs, cookieArgs } from "../lib/ytdlp";
-import { analyzeAudioFile, filenamePrefix } from "../lib/audio-analysis";
+import { analyzeAudioFile, filenamePrefix, fetchTagsFromMetadata, type AudioAnalysis } from "../lib/audio-analysis";
 
 const router: IRouter = Router();
 
@@ -232,7 +232,18 @@ async function runDownload(
       let filename = outFiles[0];
 
       job.message = "Detecting BPM/key…";
-      const analysis = await analyzeAudioFile(filePath);
+      // Creators sometimes state the exact BPM/key in the description — more
+      // accurate than audio analysis, so check it first and only analyze the
+      // actual audio for whichever field (if any) wasn't stated there.
+      const fromMetadata = await fetchTagsFromMetadata(videoId);
+      let analysis: AudioAnalysis = fromMetadata;
+      if (!fromMetadata.bpm || !fromMetadata.key) {
+        const fromAudio = await analyzeAudioFile(filePath);
+        analysis = {
+          bpm: fromMetadata.bpm ?? fromAudio.bpm,
+          key: fromMetadata.key ?? fromAudio.key,
+        };
+      }
       const prefix = filenamePrefix(analysis);
       if (prefix) {
         const renamed = path.join(tmpDir, `${prefix}${filename}`);
