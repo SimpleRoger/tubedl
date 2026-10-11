@@ -44,16 +44,35 @@ const NOTE_ALIASES: Record<string, string> = {
   "g#": "G#", "ab": "Ab",
 };
 
+function normalizeKey(rawNote: string, rawMode: string): { note: string; mode: string } {
+  const note = NOTE_ALIASES[rawNote.toLowerCase()] ?? rawNote.charAt(0).toUpperCase() + rawNote.slice(1);
+  const mode = rawMode.toLowerCase().startsWith("min") || rawMode.toLowerCase() === "m" ? "Minor" : "Major";
+  return { note, mode };
+}
+
 export function parseKeyFromText(text: string): { note: string; mode: string } | null {
   // Match: key[:/=]? <note><accidental>? <major|minor|maj|min>?
   const re = /\bkey\s*[:/=]?\s*([A-Ga-g][b#]?)\s*(major|minor|maj|min|m\b)?/i;
   const m = text.match(re);
   if (!m) return null;
-  const rawNote = m[1];
-  const rawMode = (m[2] ?? "major").toLowerCase();
-  const note = NOTE_ALIASES[rawNote.toLowerCase()] ?? rawNote.charAt(0).toUpperCase() + rawNote.slice(1);
-  const mode = rawMode.startsWith("min") || rawMode === "m" ? "Minor" : "Major";
-  return { note, mode };
+  return normalizeKey(m[1], m[2] ?? "major");
+}
+
+// Type-beat producers overwhelmingly state BPM and key together with no
+// keyword at all, e.g. "132 e major", "140 Gmin", "95 F#maj" — this is the
+// single most common format in the wild, more common than the keyword-based
+// patterns above. Matching both together (rather than separately) also
+// avoids misreading an unrelated number elsewhere in the text as the BPM.
+const BARE_BPM_KEY_RE = /\b(\d{2,3})\s+([A-Ga-g])([#b]?)\s*(major|minor|maj|min|m)\b/i;
+
+function parseBareBpmKeyTag(
+  text: string,
+): { bpm: number | null; key: { note: string; mode: string } | null } | null {
+  const m = text.match(BARE_BPM_KEY_RE);
+  if (!m) return null;
+  const bpm = parseInt(m[1], 10);
+  if (bpm < 60 || bpm > 220) return null;
+  return { bpm, key: normalizeKey(m[2] + m[3], m[4]) };
 }
 
 /**
@@ -72,9 +91,11 @@ export async function fetchTagsFromMetadata(
     const description = video.description ?? "";
     const title = video.title ?? "";
 
+    const bareTag = parseBareBpmKeyTag(description) ?? parseBareBpmKeyTag(title);
+
     return {
-      bpm: parseBpmFromText(description) ?? parseBpmFromText(title),
-      key: parseKeyFromText(description) ?? parseKeyFromText(title),
+      bpm: bareTag?.bpm ?? parseBpmFromText(description) ?? parseBpmFromText(title),
+      key: bareTag?.key ?? parseKeyFromText(description) ?? parseKeyFromText(title),
     };
   } catch {
     return { bpm: null, key: null };
