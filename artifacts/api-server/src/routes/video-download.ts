@@ -6,6 +6,7 @@ import fs from "fs";
 import os from "os";
 import { logger } from "../lib/logger";
 import { getYtdlpBin, YTDLP_CACHE_DIR, FFMPEG_DIR, ffmpegArgs, cookieArgs } from "../lib/ytdlp";
+import { analyzeAudioFile, filenamePrefix } from "../lib/audio-analysis";
 
 const router: IRouter = Router();
 
@@ -227,7 +228,19 @@ async function runDownload(
         throw new Error("Download produced no output file");
       }
 
-      const filePath = path.join(tmpDir, outFiles[0]);
+      let filePath = path.join(tmpDir, outFiles[0]);
+      let filename = outFiles[0];
+
+      job.message = "Detecting BPM/key…";
+      const analysis = await analyzeAudioFile(filePath);
+      const prefix = filenamePrefix(analysis);
+      if (prefix) {
+        const renamed = path.join(tmpDir, `${prefix}${filename}`);
+        fs.renameSync(filePath, renamed);
+        filePath = renamed;
+        filename = path.basename(renamed);
+      }
+
       const fileId = randomUUID();
       files.set(fileId, filePath);
 
@@ -235,7 +248,7 @@ async function runDownload(
       job.pct = 100;
       job.message = "Ready to download";
       job.fileId = fileId;
-      job.filename = outFiles[0];
+      job.filename = filename;
       return;
     } catch (err: any) {
       try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}

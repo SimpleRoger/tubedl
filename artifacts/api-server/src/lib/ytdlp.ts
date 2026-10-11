@@ -53,6 +53,31 @@ export const MP3_STORAGE_DIR =
   process.env.MP3_STORAGE_DIR ??
   path.resolve(__dirname, "../../../.mp3-storage");
 
+// ── Python ────────────────────────────────────────────────────────────────────
+// Scripts (BPM/key detection, beat extraction) are invoked via a Python
+// binary. Replit kept pip packages at .pythonlibs/bin — Railway's Dockerfile
+// instead pip-installs to the system interpreter, so .pythonlibs won't exist
+// there; fall back through candidates the same way getYtdlpBin()/getFfmpegBin()
+// do instead of hardcoding a single Replit-only path.
+function resolvePythonBin(): string {
+  if (process.env.PYTHON_PATH) return process.env.PYTHON_PATH;
+
+  const candidates = [
+    path.resolve(__dirname, "../../../.pythonlibs/bin/python3"),
+    "/usr/local/bin/python3",
+    "/usr/bin/python3",
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return "python3";
+}
+
+export function getPythonBin(): string {
+  if (process.env.PYTHON_PATH) return process.env.PYTHON_PATH;
+  return resolvePythonBin();
+}
+
 // ── ffmpeg ────────────────────────────────────────────────────────────────────
 function resolveFfmpegBin(): string {
   if (process.env.FFMPEG_PATH && fs.existsSync(process.env.FFMPEG_PATH))

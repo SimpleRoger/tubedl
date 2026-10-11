@@ -14,6 +14,7 @@ import { execFileSync, execSync } from "child_process";
     "curl_cffi==0.13.0",
     "imageio-ffmpeg",
     "bgutil-ytdlp-pot-provider==1.3.1",
+    "numpy==2.2.1",
   ];
 
   let installed = false;

@@ -1,10 +1,7 @@
 import { spawn } from "child_process";
-import path from "path";
-import { getYtdlpBin, cookieArgs, serverArgs } from "./ytdlp";
+import { getYtdlpBin, getPythonBin, cookieArgs, serverArgs } from "./ytdlp";
 
-const PYTHON =
-  process.env.PYTHON_PATH ??
-  path.resolve(__dirname, "../../../.pythonlibs/bin/python3");
+const PYTHON = getPythonBin();
 
 const RETRY_PHRASES = [
   // YouTube bot detection
