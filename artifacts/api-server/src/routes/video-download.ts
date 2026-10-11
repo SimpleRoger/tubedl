@@ -7,6 +7,7 @@ import os from "os";
 import { logger } from "../lib/logger";
 import { getYtdlpBin, YTDLP_CACHE_DIR, FFMPEG_DIR, ffmpegArgs, cookieArgs } from "../lib/ytdlp";
 import { analyzeAudioFile, filenamePrefix, fetchTagsFromMetadata, type AudioAnalysis } from "../lib/audio-analysis";
+import { tunelioEnabled, tunelioCreate, downloadTunnelUrl } from "../lib/tunelio";
 
 const router: IRouter = Router();
 
@@ -156,6 +157,85 @@ async function spawnDownload(
   });
 }
 
+/** Detects BPM/key, renames the file accordingly, and marks the job done. */
+async function finalizeDownloadedFile(
+  job: DlJob,
+  videoId: string,
+  tmpDir: string,
+  outFile: string,
+): Promise<void> {
+  let filePath = path.join(tmpDir, outFile);
+  let filename = outFile;
+
+  job.message = "Detecting BPM/key…";
+  // Creators sometimes state the exact BPM/key in the description — more
+  // accurate than audio analysis, so check it first and only analyze the
+  // actual audio for whichever field (if any) wasn't stated there.
+  const fromMetadata = await fetchTagsFromMetadata(videoId);
+  let analysis: AudioAnalysis = fromMetadata;
+  if (!fromMetadata.bpm || !fromMetadata.key) {
+    const fromAudio = await analyzeAudioFile(filePath);
+    analysis = {
+      bpm: fromMetadata.bpm ?? fromAudio.bpm,
+      key: fromMetadata.key ?? fromAudio.key,
+    };
+  }
+  const prefix = filenamePrefix(analysis);
+  if (prefix) {
+    const renamed = path.join(tmpDir, `${prefix}${filename}`);
+    fs.renameSync(filePath, renamed);
+    filePath = renamed;
+    filename = path.basename(renamed);
+  }
+
+  const fileId = randomUUID();
+  files.set(fileId, filePath);
+
+  job.status = "done";
+  job.pct = 100;
+  job.message = "Ready to download";
+  job.fileId = fileId;
+  job.filename = filename;
+}
+
+/**
+ * Last-resort fallback when yt-dlp hits YouTube's bot-check wall on every
+ * proxy attempt. Costs Tunelio credits, so only called after yt-dlp has
+ * actually exhausted its own (free) retries — never the default path.
+ * Doesn't support clips (Tunelio's clip feature is progressive-mp4-only).
+ */
+async function tryTunelioFallback(
+  job: DlJob,
+  videoId: string,
+  format: "mp4" | "mp3",
+): Promise<boolean> {
+  if (!tunelioEnabled()) return false;
+
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+  const quality = format === "mp3" ? "mp3" : "1080p";
+
+  job.message = "Falling back to Tunelio…";
+  job.pct = 10;
+
+  const created = await tunelioCreate(url, quality);
+  if (!created) return false;
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "tubefeed-tunelio-"));
+  const safeFilename = path.basename(created.filename) || `${videoId}.${format}`;
+  const destPath = path.join(tmpDir, safeFilename);
+
+  job.message = "Downloading via Tunelio…";
+  job.pct = 50;
+  const ok = await downloadTunnelUrl(created.url, destPath);
+  if (!ok) {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    return false;
+  }
+
+  await finalizeDownloadedFile(job, videoId, tmpDir, safeFilename);
+  return true;
+}
+
 async function runDownload(
   jobId: string,
   videoId: string,
@@ -228,38 +308,7 @@ async function runDownload(
         throw new Error("Download produced no output file");
       }
 
-      let filePath = path.join(tmpDir, outFiles[0]);
-      let filename = outFiles[0];
-
-      job.message = "Detecting BPM/key…";
-      // Creators sometimes state the exact BPM/key in the description — more
-      // accurate than audio analysis, so check it first and only analyze the
-      // actual audio for whichever field (if any) wasn't stated there.
-      const fromMetadata = await fetchTagsFromMetadata(videoId);
-      let analysis: AudioAnalysis = fromMetadata;
-      if (!fromMetadata.bpm || !fromMetadata.key) {
-        const fromAudio = await analyzeAudioFile(filePath);
-        analysis = {
-          bpm: fromMetadata.bpm ?? fromAudio.bpm,
-          key: fromMetadata.key ?? fromAudio.key,
-        };
-      }
-      const prefix = filenamePrefix(analysis);
-      if (prefix) {
-        const renamed = path.join(tmpDir, `${prefix}${filename}`);
-        fs.renameSync(filePath, renamed);
-        filePath = renamed;
-        filename = path.basename(renamed);
-      }
-
-      const fileId = randomUUID();
-      files.set(fileId, filePath);
-
-      job.status = "done";
-      job.pct = 100;
-      job.message = "Ready to download";
-      job.fileId = fileId;
-      job.filename = filename;
+      await finalizeDownloadedFile(job, videoId, tmpDir, outFiles[0]);
       return;
     } catch (err: any) {
       try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
@@ -270,6 +319,15 @@ async function runDownload(
       if (!retryable && !isLastAttempt) continue;
       if (isLastAttempt) break;
     }
+  }
+
+  // Last resort: Tunelio (paid, so only tried once yt-dlp has genuinely
+  // failed, and only for bot-check-style errors, not permanent ones like a
+  // private/deleted video, where Tunelio would fail identically).
+  if (!isClip && lastErr && needsCookies(lastErr.message)) {
+    logger.warn({ videoId, format }, "yt-dlp exhausted — trying Tunelio fallback");
+    const ok = await tryTunelioFallback(job, videoId, format);
+    if (ok) return;
   }
 
   logger.error({ videoId, format, err: lastErr }, "video download failed after all attempts");
