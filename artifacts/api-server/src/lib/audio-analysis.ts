@@ -44,18 +44,35 @@ const NOTE_ALIASES: Record<string, string> = {
   "g#": "G#", "ab": "Ab",
 };
 
-function normalizeKey(rawNote: string, rawMode: string): { note: string; mode: string } {
-  const note = NOTE_ALIASES[rawNote.toLowerCase()] ?? rawNote.charAt(0).toUpperCase() + rawNote.slice(1);
+// Accidental after the note letter: ASCII b/# must be attached ("Ab", but not
+// the "b" in "A but"); ♭/♯/flat/sharp may be spaced ("A ♭", "E flat").
+const ACCIDENTAL_RE_SRC = String.raw`(?:[b#](?![a-ln-z])|\s*[♭♯]|[\s-]*(?:flat|sharp)\b)`;
+
+/** Map a raw accidental ("b", "♭", "flat", "#", "♯", "sharp") to "b" / "#" / "". */
+function normalizeAccidental(raw: string | undefined): string {
+  const a = (raw ?? "").toLowerCase().replace(/[\s-]/g, "");
+  if (a === "b" || a === "♭" || a === "flat") return "b";
+  if (a === "#" || a === "♯" || a === "sharp") return "#";
+  return "";
+}
+
+function normalizeKey(letter: string, accidental: string | undefined, rawMode: string): { note: string; mode: string } {
+  const rawNote = letter.toUpperCase() + normalizeAccidental(accidental);
+  const note = NOTE_ALIASES[rawNote.toLowerCase()] ?? rawNote;
   const mode = rawMode.toLowerCase().startsWith("min") || rawMode.toLowerCase() === "m" ? "Minor" : "Major";
   return { note, mode };
 }
 
+const KEYWORD_KEY_RE = new RegExp(
+  String.raw`\bkey\s*[:/=]?\s*([A-Ga-g])(${ACCIDENTAL_RE_SRC})?\s*(major|minor|maj|min|m\b)?`,
+  "i",
+);
+
 export function parseKeyFromText(text: string): { note: string; mode: string } | null {
   // Match: key[:/=]? <note><accidental>? <major|minor|maj|min>?
-  const re = /\bkey\s*[:/=]?\s*([A-Ga-g][b#]?)\s*(major|minor|maj|min|m\b)?/i;
-  const m = text.match(re);
+  const m = text.match(KEYWORD_KEY_RE);
   if (!m) return null;
-  return normalizeKey(m[1], m[2] ?? "major");
+  return normalizeKey(m[1], m[2], m[3] ?? "major");
 }
 
 // Type-beat producers overwhelmingly state BPM and key together with no
@@ -63,7 +80,10 @@ export function parseKeyFromText(text: string): { note: string; mode: string } |
 // single most common format in the wild, more common than the keyword-based
 // patterns above. Matching both together (rather than separately) also
 // avoids misreading an unrelated number elsewhere in the text as the BPM.
-const BARE_BPM_KEY_RE = /\b(\d{2,3})\s+([A-Ga-g])([#b]?)\s*(major|minor|maj|min|m)\b/i;
+const BARE_BPM_KEY_RE = new RegExp(
+  String.raw`\b(\d{2,3})\s+([A-Ga-g])(${ACCIDENTAL_RE_SRC})?\s*(major|minor|maj|min|m)\b`,
+  "i",
+);
 
 function parseBareBpmKeyTag(
   text: string,
@@ -72,7 +92,7 @@ function parseBareBpmKeyTag(
   if (!m) return null;
   const bpm = parseInt(m[1], 10);
   if (bpm < 60 || bpm > 220) return null;
-  return { bpm, key: normalizeKey(m[2] + m[3], m[4]) };
+  return { bpm, key: normalizeKey(m[2], m[3], m[4]) };
 }
 
 /**
