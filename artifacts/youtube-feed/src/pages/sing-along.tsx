@@ -4,10 +4,17 @@ import { motion, AnimatePresence } from "framer-motion";
 import { VideoCard } from "../components/video-card";
 import { VideoSkeleton } from "../components/video-skeleton";
 import { PitchMeter } from "../components/pitch-meter";
+import { PianoKeyboard } from "../components/piano-keyboard";
 import { Header } from "../components/header";
 import { usePitchDetection } from "../hooks/use-pitch-detection";
+import { midiToFrequency, midiToNoteName } from "../lib/pitch-detection";
+import { playTone, stopTone } from "../lib/tone-synth";
 import { customFetch, useSavedVideos } from "@workspace/api-client-react";
 import type { Video } from "@workspace/api-client-react";
+
+// C2 to B5 — four octaves, comfortably covers most singing voices
+const KEYBOARD_LOW_MIDI = 36;
+const KEYBOARD_HIGH_MIDI = 83;
 
 export default function SingAlong() {
   const [query, setQuery] = useState("");
@@ -17,10 +24,16 @@ export default function SingAlong() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<Video | null>(null);
+  const [targetMidi, setTargetMidi] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { savedIds, toggleSave } = useSavedVideos();
   const { start, stop, pitch, isListening, error: micError } = usePitchDetection();
+
+  const handleKeyPress = useCallback((midi: number) => {
+    setTargetMidi(midi);
+    playTone(midiToFrequency(midi));
+  }, []);
 
   const handleSearch = useCallback(async (q: string) => {
     const trimmed = q.trim();
@@ -49,8 +62,8 @@ export default function SingAlong() {
     if (!nowPlaying) inputRef.current?.focus();
   }, [nowPlaying]);
 
-  // Stop the mic whenever the video changes or this page is left
-  useEffect(() => () => stop(), [nowPlaying, stop]);
+  // Stop the mic and any reference tone whenever the video changes or this page is left
+  useEffect(() => () => { stop(); stopTone(); }, [nowPlaying, stop]);
 
   const skeletons = Array.from({ length: 8 });
 
@@ -104,6 +117,33 @@ export default function SingAlong() {
             <p className="text-xs text-text-muted text-center max-w-sm">
               Sing along with the video — your live note and how sharp/flat you are shows up above.
               Headphones help a lot here, since your mic will otherwise pick up the video's own audio too.
+            </p>
+          </div>
+
+          <div className="bg-surface border border-border rounded-2xl p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-text-muted">
+                Pitch Match
+              </p>
+              {targetMidi !== null && (() => {
+                const { note, octave } = midiToNoteName(targetMidi);
+                const matched = isListening && pitch?.midi === targetMidi;
+                return (
+                  <span className={`text-sm font-bold ${matched ? "text-green-400" : "text-text-main"}`}>
+                    Target: {note}{octave} {matched && "— Match! 🎯"}
+                  </span>
+                );
+              })()}
+            </div>
+            <PianoKeyboard
+              lowMidi={KEYBOARD_LOW_MIDI}
+              highMidi={KEYBOARD_HIGH_MIDI}
+              targetMidi={targetMidi}
+              liveMidi={isListening ? pitch?.midi ?? null : null}
+              onKeyPress={handleKeyPress}
+            />
+            <p className="text-xs text-text-muted text-center">
+              Click a key to hear it, then try to match it with your voice.
             </p>
           </div>
         </main>

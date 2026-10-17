@@ -78,3 +78,17 @@ export function frequencyToNote(freq: number): NoteInfo {
   const octave = Math.floor(midi / 12) - 1;
   return { note, octave, cents, midi };
 }
+
+export function midiToFrequency(midi: number): number {
+  return 440 * Math.pow(2, (midi - 69) / 12);
+}
+
+export function midiToNoteName(midi: number): { note: string; octave: number } {
+  const note = NOTE_NAMES[((midi % 12) + 12) % 12];
+  const octave = Math.floor(midi / 12) - 1;
+  return { note, octave };
+}
+
+export function isBlackKey(midi: number): boolean {
+  return NOTE_NAMES[((midi % 12) + 12) % 12].includes("#");
+}
