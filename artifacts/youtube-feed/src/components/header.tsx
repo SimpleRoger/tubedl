@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Bookmark, Search, Rss } from "lucide-react";
+import { Bookmark, Search, Rss, Mic } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Search", icon: Search },
   { href: "/channels", label: "Feed", icon: Rss },
   { href: "/saved", label: "Saved", icon: Bookmark },
+  { href: "/sing", label: "Sing", icon: Mic },
 ];
 
 export function Header({ children }: { children?: ReactNode }) {
