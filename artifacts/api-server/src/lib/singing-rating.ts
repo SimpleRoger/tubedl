@@ -74,9 +74,14 @@ function parseRating(raw: string): SingingRating {
 export async function rateSingingClip(audioBuffer: Buffer): Promise<SingingRating> {
   const wav = await convertToWav(audioBuffer);
 
+  // Audio-capable chat-completions models only actually process input_audio
+  // when "audio" is also declared as an output modality (text-only here
+  // silently ignores the audio content block instead of erroring) — so we
+  // get a spoken response back too, even though we only want the transcript.
   const completion = await getClient().chat.completions.create({
     model: "gpt-audio",
-    modalities: ["text"],
+    modalities: ["text", "audio"],
+    audio: { voice: "alloy", format: "mp3" },
     messages: [
       {
         role: "user",
@@ -88,6 +93,7 @@ export async function rateSingingClip(audioBuffer: Buffer): Promise<SingingRatin
     ],
   } as any);
 
-  const raw = completion.choices[0]?.message?.content?.trim() ?? "";
+  const message = completion.choices[0]?.message as any;
+  const raw: string = (message?.audio?.transcript || message?.content || "").trim();
   return parseRating(raw);
 }
