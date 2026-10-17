@@ -9,6 +9,7 @@ export function usePitchDetection() {
   const [pitch, setPitch] = useState<PitchReading | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
 
   const streamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -25,6 +26,7 @@ export function usePitchDetection() {
     audioCtxRef.current = null;
     setIsListening(false);
     setPitch(null);
+    setStream(null);
   }, []);
 
   const start = useCallback(async () => {
@@ -34,6 +36,7 @@ export function usePitchDetection() {
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
       });
       streamRef.current = stream;
+      setStream(stream);
 
       const audioCtx = new AudioContext();
       audioCtxRef.current = audioCtx;
@@ -60,5 +63,5 @@ export function usePitchDetection() {
     }
   }, []);
 
-  return { start, stop, pitch, isListening, error };
+  return { start, stop, pitch, isListening, error, stream };
 }

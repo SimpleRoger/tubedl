@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Search, Mic, MicOff, AlertCircle, Loader2, ArrowLeft } from "lucide-react";
+import { Search, Mic, MicOff, AlertCircle, Loader2, ArrowLeft, Square, Star } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { VideoCard } from "../components/video-card";
 import { VideoSkeleton } from "../components/video-skeleton";
@@ -7,6 +7,7 @@ import { PitchMeter } from "../components/pitch-meter";
 import { PianoKeyboard } from "../components/piano-keyboard";
 import { Header } from "../components/header";
 import { usePitchDetection } from "../hooks/use-pitch-detection";
+import { useClipRecorder } from "../hooks/use-clip-recorder";
 import { midiToFrequency, midiToNoteName } from "../lib/pitch-detection";
 import { playTone, stopTone } from "../lib/tone-synth";
 import { customFetch, useSavedVideos } from "@workspace/api-client-react";
@@ -28,7 +29,20 @@ export default function SingAlong() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { savedIds, toggleSave } = useSavedVideos();
-  const { start, stop, pitch, isListening, error: micError } = usePitchDetection();
+  const { start, stop, pitch, isListening, error: micError, stream } = usePitchDetection();
+  const {
+    isRecording, isRating, rating, error: ratingError,
+    startRecording, stopRecording, rateClip,
+  } = useClipRecorder();
+
+  const handleToggleRecording = useCallback(async () => {
+    if (isRecording) {
+      const blob = await stopRecording();
+      if (blob) rateClip(blob);
+    } else if (stream) {
+      startRecording(stream);
+    }
+  }, [isRecording, stream, startRecording, stopRecording, rateClip]);
 
   const handleKeyPress = useCallback((midi: number) => {
     setTargetMidi(midi);
@@ -62,8 +76,9 @@ export default function SingAlong() {
     if (!nowPlaying) inputRef.current?.focus();
   }, [nowPlaying]);
 
-  // Stop the mic and any reference tone whenever the video changes or this page is left
-  useEffect(() => () => { stop(); stopTone(); }, [nowPlaying, stop]);
+  // Stop the mic, any reference tone, and any in-progress recording whenever
+  // the video changes or this page is left
+  useEffect(() => () => { stop(); stopTone(); stopRecording(); }, [nowPlaying, stop, stopRecording]);
 
   const skeletons = Array.from({ length: 8 });
 
@@ -145,6 +160,59 @@ export default function SingAlong() {
             <p className="text-xs text-text-muted text-center">
               Click a key to hear it, then try to match it with your voice.
             </p>
+          </div>
+
+          <div className="bg-surface border border-border rounded-2xl p-6 flex flex-col items-center gap-4">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-text-muted self-start">
+              Record & Rate
+            </p>
+
+            <button
+              onClick={handleToggleRecording}
+              disabled={!isListening || isRating}
+              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed ${
+                isRecording
+                  ? "bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20"
+                  : "bg-primary hover:bg-primary-hover text-white shadow-lg shadow-primary/20"
+              }`}
+            >
+              {isRecording ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              {isRecording ? "Stop & Rate" : "Record a Clip"}
+            </button>
+
+            {!isListening && (
+              <p className="text-xs text-text-muted text-center">Start singing above first to enable recording.</p>
+            )}
+
+            {isRating && (
+              <div className="flex items-center gap-2 text-sm text-text-muted">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Rating your clip…
+              </div>
+            )}
+
+            {ratingError && (
+              <div className="flex items-center gap-2 text-sm text-red-400">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                {ratingError}
+              </div>
+            )}
+
+            {rating && !isRating && (
+              <div className="w-full max-w-sm bg-background border border-border rounded-xl p-4 flex flex-col gap-2">
+                {rating.score !== null && (
+                  <div className="flex items-center gap-2">
+                    <Star className="w-4 h-4 text-amber-400 shrink-0" fill="currentColor" />
+                    <span className="text-lg font-bold text-text-main">{rating.score}/10</span>
+                  </div>
+                )}
+                {rating.pitch && <p className="text-sm text-text-main">{rating.pitch}</p>}
+                {rating.feedback && <p className="text-xs text-text-muted leading-relaxed">{rating.feedback}</p>}
+                {rating.score === null && !rating.pitch && !rating.feedback && (
+                  <p className="text-xs text-text-muted leading-relaxed">{rating.raw}</p>
+                )}
+              </div>
+            )}
           </div>
         </main>
       </div>
