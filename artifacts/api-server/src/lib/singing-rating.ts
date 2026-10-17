@@ -85,9 +85,13 @@ export async function rateSingingClip(audioBuffer: Buffer): Promise<SingingRatin
     messages: [
       {
         role: "user",
+        // Order matters: the model silently ignores the audio (responds as
+        // if none was given at all) if input_audio comes before the text
+        // part — confirmed by direct testing against the real API, not
+        // documented anywhere obvious.
         content: [
-          { type: "input_audio", input_audio: { data: wav.toString("base64"), format: "wav" } },
           { type: "text", text: RATING_PROMPT },
+          { type: "input_audio", input_audio: { data: wav.toString("base64"), format: "wav" } },
         ],
       },
     ],
